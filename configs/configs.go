@@ -2,12 +2,14 @@ package configs
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
 type Configs struct {
 	inputs       map[string][]string
 	MysqlVersion string
+	BufferSize   int
 }
 
 func New(inputs []string) (*Configs, error) {
@@ -22,8 +24,10 @@ func New(inputs []string) (*Configs, error) {
 
 func expected() map[string]string {
 	return map[string]string{
-		"v":         "MysqlVersion",
-		"--version": "MysqlVersion",
+		"v":             "MysqlVersion",
+		"--version":     "MysqlVersion",
+		"bs":            "BufferSize",
+		"--buffer-size": "BufferSize",
 	}
 }
 
@@ -72,4 +76,16 @@ func (c *Configs) GetMysqlVersion() string {
 		return c.inputs["MysqlVersion"][0]
 	}
 	return "latest"
+}
+
+func (c *Configs) GetBufferSize() int {
+	if c.inputs["BufferSize"] != nil && len(c.inputs["BufferSize"]) > 0 {
+		size := c.inputs["BufferSize"][0]
+		sizeInt, err := strconv.Atoi(size)
+		if err != nil {
+			return 10
+		}
+		return sizeInt
+	}
+	return 10
 }

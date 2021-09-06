@@ -2,26 +2,58 @@ package trysql
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/blainemoser/TrySql/configs"
 	"github.com/blainemoser/TrySql/docker"
+	"github.com/blainemoser/TrySql/utils"
 	"github.com/gosuri/uilive"
 )
 
+var Testing bool
+
 type TrySql struct {
-	docker *docker.Docker
-	image  string
-	hash   string
+	docker     *docker.Docker
+	image      string
+	hash       string
+	ReadyState int
+	Configs    *configs.Configs
 }
 
-func Init(owner, version string) (*TrySql, error) {
+func Initialise() *TrySql {
+	var err error
+	args := getArgs()
+	confs, err := utils.GetInputs(args)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	ts, err := generate(utils.GetProcessOwner(), confs)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	fmt.Println("found " + string(ts.DockerVersion()))
+	err = ts.Provision()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	err = ts.Run()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	return ts
+}
+
+func generate(owner string, configs *configs.Configs) (*TrySql, error) {
 	ts := &TrySql{
 		docker: &docker.Docker{
 			RunAsSudo: owner != "root",
 		},
-		image: "mysql/mysql-server:" + version,
+		image:   "mysql/mysql-server:" + configs.GetMysqlVersion(),
+		Configs: configs,
 	}
 	err := ts.initDocker()
 	if err != nil {
@@ -56,7 +88,7 @@ func (ts *TrySql) Provision() error {
 }
 
 func (ts *TrySql) TearDown() error {
-	running, err := ts.running()
+	running, err := ts.isRunning()
 	if err != nil {
 		return err
 	}
@@ -64,6 +96,7 @@ func (ts *TrySql) TearDown() error {
 		fmt.Println("container not running")
 		return nil
 	}
+	fmt.Println("tearing down")
 	err = ts.waitAndWrite(ts.stoppingContainer, "stopping container")
 	if err != nil {
 		return err
@@ -72,7 +105,7 @@ func (ts *TrySql) TearDown() error {
 }
 
 func (ts *TrySql) Run() error {
-	running, err := ts.running()
+	running, err := ts.isRunning()
 	if err != nil {
 		return err
 	}
@@ -106,7 +139,7 @@ func (ts *TrySql) initDocker() error {
 	return ts.docker.SetVersion()
 }
 
-func (ts *TrySql) running() (bool, error) {
+func (ts *TrySql) isRunning() (bool, error) {
 	containers, err := ts.ListContainers()
 	if err != nil {
 		return false, err
@@ -156,6 +189,7 @@ func (ts *TrySql) settingUpContainer(wg *sync.WaitGroup, initChan chan error) {
 	defer wg.Done()
 	result, err := ts.outputCommand([]string{"run", "-d", "--name=TrySql", ts.image})
 	ts.hash = result
+	ts.ReadyState = 1
 	initChan <- err
 }
 
@@ -183,4 +217,11 @@ func (ts *TrySql) outputCommand(args []string) (string, error) {
 		return "", err
 	}
 	return result, nil
+}
+
+func getArgs() []string {
+	if Testing {
+		return []string{"-v", "latest"}
+	}
+	return os.Args[1:]
 }
