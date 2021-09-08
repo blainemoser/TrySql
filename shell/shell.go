@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/blainemoser/TrySql/help"
 	"github.com/blainemoser/TrySql/trysql"
 	"github.com/blainemoser/TrySql/utils"
 )
@@ -105,14 +106,16 @@ func (c *TrySqlShell) Running() {
 }
 
 func (c *TrySqlShell) handleCommand(command string) bool {
+	if commandSplit, ok := c.checkHelp(command); ok {
+		c.help(commandSplit)
+		return false
+	}
 	switch command {
 	case "":
 		return false
 	case "quit", "exit", "q":
 		return c.quit()
-	case "help", "h":
-		c.help(command)
-	case "history":
+	case "history", "hist", "hi":
 		return c.getHistory()
 	case "docker-version", "version", "dv":
 		return c.getVersion(command)
@@ -132,8 +135,20 @@ func (c *TrySqlShell) quit() bool {
 	return true
 }
 
-func (c *TrySqlShell) help(command string) {
-	c.shellOutput(command, "> figure it out for yourself...")
+func (c *TrySqlShell) help(command []string) {
+	result := help.Get(command)
+	c.shellOutput("", "\n"+result+"\n")
+}
+
+func (c *TrySqlShell) checkHelp(command string) ([]string, bool) {
+	split := strings.Split(command, " ")
+	if len(split) < 1 {
+		return []string{}, false
+	}
+	if split[0] == "help" || split[0] == "h" {
+		return split, true
+	}
+	return []string{}, false
 }
 
 func (c *TrySqlShell) shellOutput(input, msg string) {
