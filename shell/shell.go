@@ -4,19 +4,26 @@ import (
 	"bufio"
 	"bytes"
 	"container/list"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
 	"strings"
 	"sync"
+	"time"
 
-	"github.com/blainemoser/TrySql/configs"
+	"github.com/blainemoser/TrySql/trysql"
+	"github.com/blainemoser/TrySql/utils"
 )
 
 var Testing bool
 
+const timeFormat string = "15:04:05"
+const shellVersion string = "1.0.0"
+
 type TrySqlShell struct {
+	TS           *trysql.TrySql
 	OsInterrupt  chan os.Signal
 	UserInput    chan string
 	LastCaptured chan string
@@ -28,11 +35,12 @@ type TrySqlShell struct {
 }
 
 type BufferObject struct {
-	In  string
-	Out string
+	In   string
+	Out  string
+	Time time.Time
 }
 
-func New(configs *configs.Configs) *TrySqlShell {
+func New(ts *trysql.TrySql) *TrySqlShell {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	input := make(chan string)
@@ -45,13 +53,14 @@ func New(configs *configs.Configs) *TrySqlShell {
 	}
 	reader := bufio.NewReader(stdIn)
 	return &TrySqlShell{
+		TS:           ts,
 		OsInterrupt:  c,
 		UserInput:    input,
 		StdIn:        stdIn,
 		Reader:       reader,
 		WG:           &sync.WaitGroup{},
 		Buffer:       list.New(),
-		BufferSize:   configs.GetBufferSize(),
+		BufferSize:   ts.Configs.GetBufferSize(),
 		LastCaptured: make(chan string, 1),
 	}
 }
@@ -66,7 +75,17 @@ func (c *TrySqlShell) StartTest() {
 	go c.Running()
 }
 
+func (c *TrySqlShell) greeting() {
+	msg := fmt.Sprintf(" TrySql Shell version %s ", shellVersion)
+	var line string
+	for i := 0; i < len(msg); i++ {
+		line += "_"
+	}
+	fmt.Print("\t" + line + "\n\n\t" + msg + "\n\t" + line + "\n\n")
+}
+
 func (c *TrySqlShell) Running() {
+	c.greeting()
 	go c.waitForInput()
 	for {
 		select {
@@ -76,7 +95,7 @@ func (c *TrySqlShell) Running() {
 			c.WG.Done()
 			return
 		case command := <-c.UserInput:
-			c.Capture(command)
+			c.Capture(&command)
 			if c.handleCommand(command) {
 				return
 			}
@@ -87,17 +106,20 @@ func (c *TrySqlShell) Running() {
 
 func (c *TrySqlShell) handleCommand(command string) bool {
 	switch command {
+	case "":
+		return false
 	case "quit", "exit", "q":
 		return c.quit()
 	case "help", "h":
-		c.help()
+		c.help(command)
 	case "history":
-		c.getHistory()
-		return false
+		return c.getHistory()
+	case "docker-version", "version", "dv":
+		return c.getVersion(command)
 	case "[error]":
 		return false
 	default:
-		c.shellOutput(command, fmt.Sprintf("> unrecognised command '%s'. Type 'help' for help", command))
+		c.shellOutput(command, fmt.Sprintf("> unrecognised command '%s'. Type 'help' for help", strings.ReplaceAll(command, "\n", "")))
 	}
 
 	return false
@@ -110,14 +132,19 @@ func (c *TrySqlShell) quit() bool {
 	return true
 }
 
-func (c *TrySqlShell) help() {
-	c.shellOutput("help", "> figure it out for yourself...")
+func (c *TrySqlShell) help(command string) {
+	c.shellOutput(command, "> figure it out for yourself...")
 }
 
 func (c *TrySqlShell) shellOutput(input, msg string) {
+	if len(input) < 1 {
+		fmt.Println(msg)
+		return
+	}
 	b := &BufferObject{
-		In:  input,
-		Out: msg,
+		In:   input,
+		Out:  msg,
+		Time: time.Now(),
 	}
 	if c.Buffer.Len() >= c.BufferSize {
 		e := c.Buffer.Back()
@@ -130,23 +157,32 @@ func (c *TrySqlShell) shellOutput(input, msg string) {
 func (c *TrySqlShell) waitForInput() {
 	fmt.Print("> ")
 	userInput, err := c.Reader.ReadString('\n')
+	if err != nil && userInput == "\n" {
+		err = errors.New("carriage_return")
+	}
 	if err != nil {
 		c.bufferError(err)
 		return
 	}
-	userInput = strings.TrimSuffix(userInput, "\n")
+	c.special(&userInput)
 	if userInput == "" {
-		return
+		c.UserInput <- "[error]"
 	}
+	userInput = strings.TrimSuffix(userInput, "\n")
 	c.UserInput <- userInput
 }
 
 func (c *TrySqlShell) bufferError(err error) {
-	if err.Error() == "EOF" {
+	switch err.Error() {
+	case "EOF":
 		return
+	case "carriage_return":
+		c.UserInput <- "[error]"
+		return
+	default:
+		c.shellOutput("", "> An error occured ("+err.Error()+"), please try again")
+		c.UserInput <- "[error]"
 	}
-	c.shellOutput("", "> An error occured ("+err.Error()+"), please try again")
-	c.UserInput <- "[error]"
 }
 
 func (c *TrySqlShell) Push(input string) string {
@@ -155,17 +191,19 @@ func (c *TrySqlShell) Push(input string) string {
 	return result
 }
 
-func (c *TrySqlShell) getHistory() {
+func (c *TrySqlShell) getHistory() bool {
 	fmt.Println()
 	message := ""
 	for e := c.Buffer.Front(); e != nil; e = e.Next() {
 		if e.Value != nil {
 			if add, ok := e.Value.(*BufferObject); ok {
 				if len(add.In) > 0 {
-					message += "> " + add.In + "\n"
+					message += "\t" + add.In + "\n"
 				}
 				if len(add.Out) > 0 {
-					message += ">>> " + strings.Replace(add.Out, "> ", "", 1) + "\n"
+					outMsg := strings.Replace(add.Out, "> ", "", 1)
+					utils.TruncString(&outMsg, 100)
+					message += "\t-> " + outMsg + "\n\t   at " + add.Time.Format(timeFormat) + "\n\n"
 				}
 			}
 		}
@@ -173,6 +211,7 @@ func (c *TrySqlShell) getHistory() {
 	if len(message) > 0 {
 		fmt.Println(message)
 	}
+	return false
 }
 
 func (c *TrySqlShell) LastOutput() string {
@@ -189,10 +228,50 @@ func (c *TrySqlShell) LastOutput() string {
 	return ""
 }
 
-func (c *TrySqlShell) Capture(command string) {
+func (c *TrySqlShell) getVersion(command string) bool {
+	c.shellOutput(command, "> "+c.TS.DockerVersion())
+	return false
+}
+
+func (c *TrySqlShell) Capture(command *string) {
+	c.sanitize(command)
 	if len(c.LastCaptured) > 0 {
 		// Drain channel
 		<-c.LastCaptured
 	}
-	c.LastCaptured <- command
+	c.LastCaptured <- *command
+}
+
+func (c *TrySqlShell) lastCommand() string {
+	if c.Buffer.Len() < 1 {
+		return ""
+	}
+	e := c.Buffer.Front()
+	if e == nil {
+		return ""
+	}
+	if obj, ok := e.Value.(*BufferObject); ok {
+		return obj.In
+	}
+	return ""
+}
+
+func (c *TrySqlShell) sanitize(command *string) {
+	*command = strings.ReplaceAll(*command, "\n", "")
+	*command = strings.ReplaceAll(*command, "\t", "")
+	*command = strings.Trim(*command, " ")
+}
+
+func (c *TrySqlShell) special(userInput *string) {
+	bytes := []byte(*userInput)
+	if len(bytes) >= 3 {
+		if bytes[0] == 27 && bytes[1] == 91 {
+			if bytes[2] == 65 {
+				lst := c.lastCommand()
+				*userInput = lst
+				return
+			}
+			*userInput = ""
+		}
+	}
 }

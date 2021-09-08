@@ -16,7 +16,7 @@ func main() {
 		log.Fatal(err.Error())
 		return
 	}
-	c := shell.New(ts.Configs)
+	c := shell.New(ts)
 	c.Start()
 	err = ts.TearDown()
 	if err != nil {

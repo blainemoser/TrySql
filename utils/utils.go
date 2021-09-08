@@ -33,3 +33,10 @@ func GetErrors(errs []error) error {
 	}
 	return nil
 }
+
+func TruncString(input *string, limit int) {
+	if len(*input) <= limit {
+		return
+	}
+	*input = (*input)[0:limit-3] + "..."
+}

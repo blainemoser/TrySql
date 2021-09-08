@@ -3,6 +3,7 @@ package docker
 import (
 	"errors"
 	"os/exec"
+	"strings"
 )
 
 type Docker struct {
@@ -32,7 +33,7 @@ func (d *Docker) SetVersion() error {
 	if err != nil {
 		return err
 	}
-	d.Version = result
+	d.Version = strings.Replace(result, "\n", "", -1)
 	return nil
 }
 

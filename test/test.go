@@ -18,7 +18,7 @@ func Init() (*TestSuiteTS, error) {
 	shell.Testing = true
 	trySql := trysql.Initialise()
 	ts := &TestSuiteTS{
-		Shell: shell.New(trySql.Configs),
+		Shell: shell.New(trySql),
 		TS:    trySql,
 	}
 
