@@ -36,11 +36,11 @@ func Initialise() *TrySql {
 		log.Fatal(err.Error())
 	}
 	fmt.Println("found " + string(ts.DockerVersion()))
-	err = ts.Provision()
+	err = ts.provision()
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	err = ts.Run()
+	err = ts.run()
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -82,7 +82,7 @@ func (ts *TrySql) ListContainers() ([]string, error) {
 	return []string{}, nil
 }
 
-func (ts *TrySql) Provision() error {
+func (ts *TrySql) provision() error {
 	msg := "pulling up to date image"
 	return ts.waitAndWrite(ts.provisioningDocker, msg)
 }
@@ -104,7 +104,7 @@ func (ts *TrySql) TearDown() error {
 	return ts.waitAndWrite(ts.removingContainer, "removing container")
 }
 
-func (ts *TrySql) Run() error {
+func (ts *TrySql) run() error {
 	running, err := ts.isRunning()
 	if err != nil {
 		return err

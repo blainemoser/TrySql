@@ -26,10 +26,10 @@ func New(inputs []string) (*Configs, error) {
 
 func expected() map[string]string {
 	return map[string]string{
-		"v":             "MysqlVersion",
-		"--version":     "MysqlVersion",
-		"bs":            "BufferSize",
-		"--buffer-size": "BufferSize",
+		"v":           "MysqlVersion",
+		"version":     "MysqlVersion",
+		"bs":          "BufferSize",
+		"buffer-size": "BufferSize",
 	}
 }
 
@@ -38,7 +38,6 @@ func setInputs(inputs []string) (map[string][]string, error) {
 	result := make(map[string][]string)
 	var err error
 	var curIndex string
-	var errs []error
 	for i := 0; i < len(inputs); i++ {
 		v := strings.Trim(inputs[i], " ")
 		if strings.Contains(v, "=") {
@@ -46,11 +45,9 @@ func setInputs(inputs []string) (map[string][]string, error) {
 		} else {
 			err = appendConfig(&curIndex, args, &result, v)
 		}
-		errs = append(errs, err)
-	}
-	err = utils.GetErrors(errs)
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }
@@ -83,7 +80,7 @@ func appendConfig(curIndex *string, args map[string]string, result *map[string][
 }
 
 func removeDashes(input *string) {
-	result := strings.ReplaceAll(*input, "-", "")
+	result := strings.Replace(*input, "-", "", 2)
 	*input = result
 }
 

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"testing"
 )
 
 func GetProcessOwner() string {
@@ -33,22 +34,18 @@ func GetErrors(errs []error) error {
 }
 
 func TruncString(input *string, limit int) {
+	if limit < 10 {
+		limit = 10
+	}
 	if len(*input) <= limit {
 		return
 	}
-	*input = (*input)[0:limit-3] + "..."
+	*input = (*input)[0:limit-4] + "..."
 }
 
-func StringInList(needle string, haystack []string) bool {
-	for _, h := range haystack {
-		if needle == h {
-			return true
-		}
+func HandelPanic(t *testing.T) {
+	r := recover()
+	if r != nil {
+		t.Error(r)
 	}
-	return false
-}
-
-func DelineTab(input *string) {
-	*input = strings.ReplaceAll(*input, "\t", " ")
-	*input = strings.ReplaceAll(*input, "\n", " ")
 }

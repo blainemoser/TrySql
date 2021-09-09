@@ -1,10 +1,9 @@
-package test
+package trysqltest
 
 import (
 	"fmt"
 	"os"
 	"strings"
-	"testing"
 
 	"github.com/blainemoser/TrySql/help"
 	"github.com/blainemoser/TrySql/shell"
@@ -25,12 +24,6 @@ func Init() (*TestSuiteTS, error) {
 		Shell: shell.New(trySql),
 		TS:    trySql,
 	}
-
-	err := ts.run()
-	if err != nil {
-		return nil, err
-	}
-
 	return ts, nil
 }
 
@@ -47,41 +40,27 @@ func (ts *TestSuiteTS) Stop() error {
 	return nil
 }
 
-func (ts *TestSuiteTS) HandelPanic(t *testing.T) {
-	r := recover()
-	if r != nil {
-		t.Error(r)
-	}
-}
-
 func (ts *TestSuiteTS) SendHelpSignal() {
 	ts.Shell.Push("help")
-	checkHelp(ts.Shell.LastOutput())
+	ts.checkHelp(ts.Shell.LastOutput())
 }
 
 func (ts *TestSuiteTS) SendVersionSignal() {
 	ts.Shell.Push("version")
-	checkVersion(ts.Shell.LastOutput())
+	ts.checkVersion(ts.Shell.LastOutput())
 }
 
 func (ts *TestSuiteTS) SendHistorySignal() {
+	ts.Shell.Push("version")
 	ts.Shell.Push("history")
-	checkHistory(ts.Shell.LastOutput())
+	ts.checkHistory(ts.Shell.LastOutput())
 }
 
 func (ts *TestSuiteTS) SendExitSignal() {
 	ts.Shell.OsInterrupt <- os.Interrupt
 }
 
-func (ts *TestSuiteTS) run() error {
-	err := ts.TS.Run()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func checkHelp(output string) {
+func (ts *TestSuiteTS) checkHelp(output string) {
 	help := help.Get([]string{"help"})
 	helpSplit := strings.Split(help, "\n\n")
 	var errs []error
@@ -100,10 +79,15 @@ func checkHelp(output string) {
 	}
 }
 
-func checkVersion(output string) {
-	fmt.Println(output)
+func (ts *TestSuiteTS) checkVersion(output string) {
+	version := ts.TS.DockerVersion()
+	if !strings.Contains(output, version) {
+		panic(fmt.Errorf("expected output to containt '%s'", version))
+	}
 }
 
-func checkHistory(output string) {
-	fmt.Println(output)
+func (ts *TestSuiteTS) checkHistory(output string) {
+	if !strings.Contains(strings.ToLower(output), "docker version") {
+		panic(fmt.Errorf("expected output to contain 'docker version'"))
+	}
 }

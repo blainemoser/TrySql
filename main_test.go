@@ -4,7 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/blainemoser/TrySql/test"
+	test "github.com/blainemoser/TrySql/trysqltest"
+	"github.com/blainemoser/TrySql/utils"
 )
 
 var suite *test.TestSuiteTS
@@ -25,11 +26,16 @@ func TestMain(m *testing.M) {
 }
 
 func TestHelp(t *testing.T) {
-	defer suite.HandelPanic(t)
+	defer utils.HandelPanic(t)
 	suite.SendHelpSignal()
 }
 
 func TestVersion(t *testing.T) {
-	defer suite.HandelPanic(t)
+	defer utils.HandelPanic(t)
 	suite.SendVersionSignal()
+}
+
+func TestHistory(t *testing.T) {
+	defer utils.HandelPanic(t)
+	suite.SendHistorySignal()
 }

@@ -43,7 +43,7 @@ func (c *command) Args(args []string) *command {
 }
 
 func (c *command) Exec() (string, error) {
-	result, err := exec.Command(c.inputs[0], c.inputs[0:]...).CombinedOutput()
+	result, err := exec.Command(c.inputs[0], c.inputs[1:]...).CombinedOutput()
 	if err != nil {
 		return "", errors.New(err.Error() + ": " + string(result))
 	}
