@@ -27,7 +27,7 @@ type TrySql struct {
 func Initialise() *TrySql {
 	var err error
 	args := getArgs()
-	confs, err := utils.GetInputs(args)
+	confs, err := configs.New(args)
 	if err != nil {
 		log.Fatal(err.Error())
 	}

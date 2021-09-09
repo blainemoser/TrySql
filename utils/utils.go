@@ -7,8 +7,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-
-	"github.com/blainemoser/TrySql/configs"
 )
 
 func GetProcessOwner() string {
@@ -19,16 +17,16 @@ func GetProcessOwner() string {
 	return string(stdout)
 }
 
-func GetInputs(args []string) (*configs.Configs, error) {
-	return configs.New(args)
-}
-
 func GetErrors(errs []error) error {
 	var errStrings []string
 	if len(errs) > 0 {
 		for _, e := range errs {
-			errStrings = append(errStrings, e.Error())
+			if e != nil {
+				errStrings = append(errStrings, e.Error())
+			}
 		}
+	}
+	if len(errStrings) > 0 {
 		return fmt.Errorf(strings.Join(errStrings, "; "))
 	}
 	return nil

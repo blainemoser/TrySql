@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/blainemoser/TrySql/utils"
 )
 
 type Configs struct {
@@ -33,34 +35,48 @@ func expected() map[string]string {
 
 func setInputs(inputs []string) (map[string][]string, error) {
 	args := expected()
-	result := map[string][]string{}
+	result := make(map[string][]string)
 	var err error
 	var curIndex string
+	var errs []error
 	for i := 0; i < len(inputs); i++ {
 		v := strings.Trim(inputs[i], " ")
 		if strings.Contains(v, "=") {
-			configs := strings.Split(v, "=")
-			err = appendConfig(&curIndex, args, &result, configs[1], configs[0])
+			err = getSplitConfigs(v, args, &result, &curIndex)
 		} else {
-			err = appendConfig(&curIndex, args, &result, v, v)
+			err = appendConfig(&curIndex, args, &result, v)
 		}
-		if err != nil {
-			return nil, err
-		}
+		errs = append(errs, err)
+	}
+	err = utils.GetErrors(errs)
+	if err != nil {
+		return nil, err
 	}
 	return result, nil
 }
 
-func appendConfig(curIndex *string, args map[string]string, result *map[string][]string, value, index string) error {
-	removeDashes(&index)
-	if args[index] == "" {
+func getSplitConfigs(v string, args map[string]string, result *map[string][]string, curIndex *string) error {
+	configs := strings.Split(v, "=")
+	var err error
+	var errs []error
+	for _, c := range configs {
+		c = strings.Trim(c, " ")
+		err = appendConfig(curIndex, args, result, c)
+		errs = append(errs, err)
+	}
+	return utils.GetErrors(errs)
+}
+
+func appendConfig(curIndex *string, args map[string]string, result *map[string][]string, arg string) error {
+	removeDashes(&arg)
+	if args[arg] == "" {
 		if (*result)[*curIndex] == nil {
-			err := fmt.Errorf("the %s argument does not exist", index)
+			err := fmt.Errorf("the %s argument does not exist", arg)
 			return err
 		}
-		(*result)[*curIndex] = append((*result)[*curIndex], value)
+		(*result)[*curIndex] = append((*result)[*curIndex], arg)
 	} else {
-		*curIndex = args[index]
+		*curIndex = args[arg]
 		(*result)[*curIndex] = make([]string, 0)
 	}
 	return nil
