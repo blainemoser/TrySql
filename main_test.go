@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"testing"
 
@@ -16,10 +15,8 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	suite.Shell.WG.Add(1)
-	suite.Shell.StartTest()
+	suite.Start()
 	code := m.Run()
-	suite.Shell.WG.Wait()
 	err = suite.Stop()
 	if err != nil {
 		panic(err)
@@ -27,11 +24,12 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestProg(t *testing.T) {
-	defer suite.HandelPanic()
-	helpResult := suite.SendHelpSignal()
-	fmt.Println(helpResult)
-	historyResult := suite.SendHistorySignal()
-	fmt.Println(historyResult)
-	suite.SendExitSignal()
+func TestHelp(t *testing.T) {
+	defer suite.HandelPanic(t)
+	suite.SendHelpSignal()
+}
+
+func TestVersion(t *testing.T) {
+	defer suite.HandelPanic(t)
+	suite.SendVersionSignal()
 }

@@ -36,9 +36,10 @@ type TrySqlShell struct {
 }
 
 type BufferObject struct {
-	In   string
-	Out  string
-	Time time.Time
+	In     string
+	Out    string
+	Time   time.Time
+	hidden bool
 }
 
 func New(ts *trysql.TrySql) *TrySqlShell {
@@ -122,7 +123,14 @@ func (c *TrySqlShell) handleCommand(command string) bool {
 	case "[error]":
 		return false
 	default:
-		c.shellOutput(command, fmt.Sprintf("> unrecognised command '%s'. Type 'help' for help", strings.ReplaceAll(command, "\n", "")))
+		c.shellOutput(
+			command,
+			fmt.Sprintf(
+				"> unrecognised command '%s'. Type 'help' for help",
+				strings.ReplaceAll(command, "\n", ""),
+			),
+			false,
+		)
 	}
 
 	return false
@@ -137,7 +145,7 @@ func (c *TrySqlShell) quit() bool {
 
 func (c *TrySqlShell) help(command []string) {
 	result := help.Get(command)
-	c.shellOutput("", "\n"+result+"\n")
+	c.shellOutput("help", "\n"+result+"\n", true)
 }
 
 func (c *TrySqlShell) checkHelp(command string) ([]string, bool) {
@@ -151,15 +159,12 @@ func (c *TrySqlShell) checkHelp(command string) ([]string, bool) {
 	return []string{}, false
 }
 
-func (c *TrySqlShell) shellOutput(input, msg string) {
-	if len(input) < 1 {
-		fmt.Println(msg)
-		return
-	}
+func (c *TrySqlShell) shellOutput(input, msg string, hidden bool) {
 	b := &BufferObject{
-		In:   input,
-		Out:  msg,
-		Time: time.Now(),
+		In:     input,
+		Out:    msg,
+		Time:   time.Now(),
+		hidden: hidden,
 	}
 	if c.Buffer.Len() >= c.BufferSize {
 		e := c.Buffer.Back()
@@ -195,7 +200,7 @@ func (c *TrySqlShell) bufferError(err error) {
 		c.UserInput <- "[error]"
 		return
 	default:
-		c.shellOutput("", "> An error occured ("+err.Error()+"), please try again")
+		c.shellOutput("[error]", "> An error occured ("+err.Error()+"), please try again", true)
 		c.UserInput <- "[error]"
 	}
 }
@@ -212,6 +217,9 @@ func (c *TrySqlShell) getHistory() bool {
 	for e := c.Buffer.Front(); e != nil; e = e.Next() {
 		if e.Value != nil {
 			if add, ok := e.Value.(*BufferObject); ok {
+				if add.hidden {
+					continue
+				}
 				if len(add.In) > 0 {
 					message += "\t" + add.In + "\n"
 				}
@@ -244,7 +252,7 @@ func (c *TrySqlShell) LastOutput() string {
 }
 
 func (c *TrySqlShell) getVersion(command string) bool {
-	c.shellOutput(command, "> "+c.TS.DockerVersion())
+	c.shellOutput(command, "> "+c.TS.DockerVersion(), false)
 	return false
 }
 
@@ -258,15 +266,15 @@ func (c *TrySqlShell) Capture(command *string) {
 }
 
 func (c *TrySqlShell) lastCommand() string {
-	if c.Buffer.Len() < 1 {
-		return ""
-	}
-	e := c.Buffer.Front()
-	if e == nil {
-		return ""
-	}
-	if obj, ok := e.Value.(*BufferObject); ok {
-		return obj.In
+	for e := c.Buffer.Front(); e != nil; e = e.Next() {
+		if e.Value != nil {
+			if add, ok := e.Value.(*BufferObject); ok {
+				if len(add.In) < 0 {
+					continue
+				}
+				return add.In
+			}
+		}
 	}
 	return ""
 }
@@ -282,8 +290,7 @@ func (c *TrySqlShell) special(userInput *string) {
 	if len(bytes) >= 3 {
 		if bytes[0] == 27 && bytes[1] == 91 {
 			if bytes[2] == 65 {
-				lst := c.lastCommand()
-				*userInput = lst
+				*userInput = c.lastCommand()
 				return
 			}
 			*userInput = ""

@@ -3,9 +3,13 @@ package test
 import (
 	"fmt"
 	"os"
+	"strings"
+	"testing"
 
+	"github.com/blainemoser/TrySql/help"
 	"github.com/blainemoser/TrySql/shell"
 	"github.com/blainemoser/TrySql/trysql"
+	"github.com/blainemoser/TrySql/utils"
 )
 
 type TestSuiteTS struct {
@@ -22,7 +26,7 @@ func Init() (*TestSuiteTS, error) {
 		TS:    trySql,
 	}
 
-	err := ts.start()
+	err := ts.run()
 	if err != nil {
 		return nil, err
 	}
@@ -30,12 +34,8 @@ func Init() (*TestSuiteTS, error) {
 	return ts, nil
 }
 
-func (ts *TestSuiteTS) start() error {
-	err := ts.TS.Run()
-	if err != nil {
-		return err
-	}
-	return nil
+func (ts *TestSuiteTS) Start() {
+	ts.Shell.StartTest()
 }
 
 func (ts *TestSuiteTS) Stop() error {
@@ -47,30 +47,63 @@ func (ts *TestSuiteTS) Stop() error {
 	return nil
 }
 
-func (ts *TestSuiteTS) HandelPanic() {
+func (ts *TestSuiteTS) HandelPanic(t *testing.T) {
 	r := recover()
 	if r != nil {
-		if err, ok := r.(error); ok {
-			fmt.Printf("recovering from panic: %s\n", err.Error())
-		}
-		tdErr := ts.TS.TearDown()
-		if tdErr != nil {
-			fmt.Printf("error while tearing down test: %s", tdErr.Error())
-		}
-		panic(r)
+		t.Error(r)
 	}
 }
 
-func (ts *TestSuiteTS) SendHelpSignal() string {
+func (ts *TestSuiteTS) SendHelpSignal() {
 	ts.Shell.Push("help")
-	return ts.Shell.LastOutput()
+	checkHelp(ts.Shell.LastOutput())
 }
 
-func (ts *TestSuiteTS) SendHistorySignal() string {
+func (ts *TestSuiteTS) SendVersionSignal() {
+	ts.Shell.Push("version")
+	checkVersion(ts.Shell.LastOutput())
+}
+
+func (ts *TestSuiteTS) SendHistorySignal() {
 	ts.Shell.Push("history")
-	return ts.Shell.LastOutput()
+	checkHistory(ts.Shell.LastOutput())
 }
 
 func (ts *TestSuiteTS) SendExitSignal() {
 	ts.Shell.OsInterrupt <- os.Interrupt
+}
+
+func (ts *TestSuiteTS) run() error {
+	err := ts.TS.Run()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func checkHelp(output string) {
+	help := help.Get([]string{"help"})
+	helpSplit := strings.Split(help, "\n\n")
+	var errs []error
+	for _, h := range helpSplit {
+		h = strings.Trim(h, " ")
+		if len(h) < 1 {
+			continue
+		}
+		if !strings.Contains(output, h) {
+			errs = append(errs, fmt.Errorf("expected output to contain '%s'", h))
+		}
+	}
+	err := utils.GetErrors(errs)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func checkVersion(output string) {
+	fmt.Println(output)
+}
+
+func checkHistory(output string) {
+	fmt.Println(output)
 }

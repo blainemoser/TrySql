@@ -40,3 +40,17 @@ func TruncString(input *string, limit int) {
 	}
 	*input = (*input)[0:limit-3] + "..."
 }
+
+func StringInList(needle string, haystack []string) bool {
+	for _, h := range haystack {
+		if needle == h {
+			return true
+		}
+	}
+	return false
+}
+
+func DelineTab(input *string) {
+	*input = strings.ReplaceAll(*input, "\t", " ")
+	*input = strings.ReplaceAll(*input, "\n", " ")
+}
