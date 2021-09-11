@@ -4,15 +4,15 @@ import (
 	"os"
 	"testing"
 
-	test "github.com/blainemoser/TrySql/trysqltest"
+	"github.com/blainemoser/TrySql/shell"
 	"github.com/blainemoser/TrySql/utils"
 )
 
-var suite *test.TestSuiteTS
+var suite *shell.TestSuiteTS
 
 func TestMain(m *testing.M) {
 	var err error
-	suite, err = test.Init()
+	suite, err = shell.InitialiseTestSuite()
 	if err != nil {
 		panic(err)
 	}

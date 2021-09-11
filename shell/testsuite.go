@@ -1,4 +1,4 @@
-package trysqltest
+package shell
 
 import (
 	"fmt"
@@ -6,29 +6,28 @@ import (
 	"strings"
 
 	"github.com/blainemoser/TrySql/help"
-	"github.com/blainemoser/TrySql/shell"
 	"github.com/blainemoser/TrySql/trysql"
 	"github.com/blainemoser/TrySql/utils"
 )
 
 type TestSuiteTS struct {
-	Shell *shell.TrySqlShell
+	Shell *TrySqlShell
 	TS    *trysql.TrySql
 }
 
-func Init() (*TestSuiteTS, error) {
+func InitialiseTestSuite() (*TestSuiteTS, error) {
 	trysql.Testing = true
-	shell.Testing = true
+	Testing = true
 	trySql := trysql.Initialise()
 	ts := &TestSuiteTS{
-		Shell: shell.New(trySql),
+		Shell: New(trySql),
 		TS:    trySql,
 	}
 	return ts, nil
 }
 
 func (ts *TestSuiteTS) Start() {
-	ts.Shell.StartTest()
+	ts.Shell.Start(true)
 }
 
 func (ts *TestSuiteTS) Stop() error {
@@ -60,6 +59,19 @@ func (ts *TestSuiteTS) SendExitSignal() {
 	ts.Shell.OsInterrupt <- os.Interrupt
 }
 
+func (ts *TestSuiteTS) SendQuit() {
+	ts.Shell.handleCommand("version")
+	fmt.Println(ts.Shell.LastOutput())
+}
+
+func (ts *TestSuiteTS) IncrementWG() {
+	ts.Shell.WG.Add(1)
+}
+
+func (ts *TestSuiteTS) DecrementWG() {
+	ts.Shell.WG.Done()
+}
+
 func (ts *TestSuiteTS) checkHelp(output string) {
 	help := help.Get([]string{"help"})
 	helpSplit := strings.Split(help, "\n\n")
@@ -73,7 +85,11 @@ func (ts *TestSuiteTS) checkHelp(output string) {
 			errs = append(errs, fmt.Errorf("expected output to contain '%s'", h))
 		}
 	}
-	err := utils.GetErrors(errs)
+	var err error
+	if len(errs) > 0 {
+		errs = append(errs, fmt.Errorf("output was '%s'", output))
+		err = utils.GetErrors(errs)
+	}
 	if err != nil {
 		panic(err)
 	}

@@ -40,7 +40,7 @@ func TruncString(input *string, limit int) {
 	if len(*input) <= limit {
 		return
 	}
-	*input = (*input)[0:limit-4] + "..."
+	*input = (*input)[0:limit-3] + "..."
 }
 
 func HandelPanic(t *testing.T) {

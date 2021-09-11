@@ -32,7 +32,6 @@ type TrySqlShell struct {
 	Reader       *bufio.Reader
 	WG           *sync.WaitGroup
 	Buffer       *list.List
-	BufferSize   int
 }
 
 type BufferObject struct {
@@ -62,19 +61,18 @@ func New(ts *trysql.TrySql) *TrySqlShell {
 		Reader:       reader,
 		WG:           &sync.WaitGroup{},
 		Buffer:       list.New(),
-		BufferSize:   ts.Configs.GetBufferSize(),
 		LastCaptured: make(chan string, 1),
 	}
 }
 
-func (c *TrySqlShell) Start() {
+func (c *TrySqlShell) Start(test bool) {
+	if test {
+		go c.running()
+		return
+	}
 	c.WG.Add(1)
-	go c.Running()
+	go c.running()
 	c.WG.Wait()
-}
-
-func (c *TrySqlShell) StartTest() {
-	go c.Running()
 }
 
 func (c *TrySqlShell) greeting() {
@@ -86,7 +84,7 @@ func (c *TrySqlShell) greeting() {
 	fmt.Print("\t" + line + "\n\n\t" + msg + "\n\t" + line + "\n\n")
 }
 
-func (c *TrySqlShell) Running() {
+func (c *TrySqlShell) running() {
 	c.greeting()
 	go c.waitForInput()
 	for {
@@ -97,7 +95,7 @@ func (c *TrySqlShell) Running() {
 			c.WG.Done()
 			return
 		case command := <-c.UserInput:
-			c.Capture(&command)
+			c.capture(&command)
 			if c.handleCommand(command) {
 				return
 			}
@@ -166,7 +164,7 @@ func (c *TrySqlShell) shellOutput(input, msg string, hidden bool) {
 		Time:   time.Now(),
 		hidden: hidden,
 	}
-	if c.Buffer.Len() >= c.BufferSize {
+	if c.Buffer.Len() >= c.TS.Configs.GetBufferSize() {
 		e := c.Buffer.Back()
 		c.Buffer.Remove(e)
 	}
@@ -256,7 +254,7 @@ func (c *TrySqlShell) getVersion(command string) bool {
 	return false
 }
 
-func (c *TrySqlShell) Capture(command *string) {
+func (c *TrySqlShell) capture(command *string) {
 	c.sanitize(command)
 	if len(c.LastCaptured) > 0 {
 		// Drain channel
