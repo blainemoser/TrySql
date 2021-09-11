@@ -22,19 +22,33 @@ var info map[string]map[string]interface{} = map[string]map[string]interface{}{
 		"alias": []string{"q", "exit"},
 		"info":  "Quits the shell",
 	},
+	"container-details": {
+		"alias": []string{"cd", "get-container-details"},
+		"info":  "Gets the TrySql container's details",
+	},
+	"container-id": {
+		"alias": []string{"cid", "get-container-id"},
+		"info":  "Gets the TrySql container's ID",
+	},
 }
 
 var alias map[string]string = map[string]string{
-	"help":           "help",
-	"h":              "help",
-	"history":        "history",
-	"hi":             "history",
-	"docker-version": "docker-version",
-	"version":        "docker-version",
-	"dv":             "docker-version",
-	"quit":           "quit",
-	"q":              "quit",
-	"exit":           "quit",
+	"help":                  "help",
+	"h":                     "help",
+	"history":               "history",
+	"hi":                    "history",
+	"docker-version":        "docker-version",
+	"version":               "docker-version",
+	"dv":                    "docker-version",
+	"quit":                  "quit",
+	"q":                     "quit",
+	"exit":                  "quit",
+	"container-details":     "container-details",
+	"cd":                    "container-details",
+	"get-container-details": "container-details",
+	"container-id":          "container-id",
+	"cid":                   "container-id",
+	"get-container-id":      "container-id",
 }
 
 func Get(args []string) string {

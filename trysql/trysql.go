@@ -1,6 +1,7 @@
 package trysql
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -66,8 +67,40 @@ func (ts *TrySql) DockerVersion() string {
 	return ts.docker.Version
 }
 
-func (ts *TrySql) ListContainers() ([]string, error) {
+func (ts *TrySql) GetContainerDetails(idOnly bool) string {
+	containers, err := ts.ps()
+	if err != nil {
+		return "something went wrong while trying to get the container's details"
+	}
+	result, err := ts.findContainer(containers)
+	if err != nil {
+		return err.Error()
+	}
+	if !idOnly {
+		return result
+	}
+	ts.filterContainerID(&result)
+	return result
+}
+
+func (ts *TrySql) listContainers() ([]string, error) {
 	containers, err := ts.outputCommand([]string{"container", "ls"})
+	if err != nil {
+		return nil, err
+	}
+	existingContainers := strings.Split(containers, "\n")
+	if len(existingContainers) > 0 {
+		if strings.Contains(existingContainers[0], "CONTAINER ID") {
+			existingContainers = existingContainers[1:]
+		}
+		return existingContainers, nil
+	}
+
+	return []string{}, nil
+}
+
+func (ts *TrySql) ps() ([]string, error) {
+	containers, err := ts.outputCommand([]string{"ps"})
 	if err != nil {
 		return nil, err
 	}
@@ -87,14 +120,33 @@ func (ts *TrySql) provision() error {
 	return ts.waitAndWrite(ts.provisioningDocker, msg)
 }
 
-func (ts *TrySql) TearDown() error {
+func (ts *TrySql) containerRunning() (bool, error) {
+	exists, err := ts.containerExists()
+	if err != nil {
+		return false, err
+	}
+	if !exists {
+		fmt.Println("container does not exist")
+		return false, nil
+	}
 	running, err := ts.isRunning()
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !running {
-		fmt.Println("container not running")
+		fmt.Println("container is not running")
+		return false, nil
+	}
+	return true, nil
+}
+
+func (ts *TrySql) TearDown() error {
+	running, err := ts.containerRunning()
+	if !running {
 		return nil
+	}
+	if err != nil {
+		return err
 	}
 	fmt.Println("tearing down")
 	err = ts.waitAndWrite(ts.stoppingContainer, "stopping container")
@@ -105,7 +157,7 @@ func (ts *TrySql) TearDown() error {
 }
 
 func (ts *TrySql) run() error {
-	running, err := ts.isRunning()
+	running, err := ts.containerExists()
 	if err != nil {
 		return err
 	}
@@ -139,8 +191,40 @@ func (ts *TrySql) initDocker() error {
 	return ts.docker.SetVersion()
 }
 
+func (ts *TrySql) findContainer(containers []string) (string, error) {
+	for _, container := range containers {
+		if strings.Contains(container, "TrySql") {
+			return container, nil
+		}
+	}
+	return "", errors.New("not found")
+}
+
+func (ts *TrySql) containerExists() (bool, error) {
+	containers, err := ts.listContainers()
+	if err != nil {
+		return false, err
+	}
+	for _, container := range containers {
+		if strings.Contains(container, "TrySql") {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (ts *TrySql) filterContainerID(containerDetails *string) {
+	*containerDetails = strings.ReplaceAll(*containerDetails, "\n", " ")
+	*containerDetails = strings.ReplaceAll(*containerDetails, "\t", " ")
+	splitC := strings.Split(*containerDetails, " ")
+	if len(splitC) < 1 {
+		*containerDetails = ""
+	}
+	*containerDetails = splitC[0]
+}
+
 func (ts *TrySql) isRunning() (bool, error) {
-	containers, err := ts.ListContainers()
+	containers, err := ts.ps()
 	if err != nil {
 		return false, err
 	}

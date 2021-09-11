@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/blainemoser/TrySql/help"
 	"github.com/blainemoser/TrySql/trysql"
@@ -40,19 +41,32 @@ func (ts *TestSuiteTS) Stop() error {
 }
 
 func (ts *TestSuiteTS) SendHelpSignal() {
-	ts.Shell.Push("help")
-	ts.checkHelp(ts.Shell.LastOutput())
+	result := ts.Shell.Push("help")
+	ts.checkHelp(result)
 }
 
 func (ts *TestSuiteTS) SendVersionSignal() {
-	ts.Shell.Push("version")
-	ts.checkVersion(ts.Shell.LastOutput())
+	result := ts.Shell.Push("version")
+	ts.checkVersion(result)
 }
 
 func (ts *TestSuiteTS) SendHistorySignal() {
-	ts.Shell.Push("version")
+	result := ts.Shell.Push("version")
 	ts.Shell.Push("history")
-	ts.checkHistory(ts.Shell.LastOutput())
+	ts.checkHistory(result)
+}
+
+func (ts *TestSuiteTS) SendContainerDetailsSignal() {
+	result := ts.Shell.Push("cd")
+	fmt.Println(result)
+	time.Sleep(time.Second * 1)
+	result = ts.Shell.LastOutput()
+	ts.checkDetails(result)
+}
+
+func (ts *TestSuiteTS) SendContainerIDSignal() {
+	result := ts.Shell.Push("cid")
+	ts.checkID(result)
 }
 
 func (ts *TestSuiteTS) SendExitSignal() {
@@ -60,8 +74,8 @@ func (ts *TestSuiteTS) SendExitSignal() {
 }
 
 func (ts *TestSuiteTS) SendQuit() {
-	ts.Shell.handleCommand("version")
-	fmt.Println(ts.Shell.LastOutput())
+	result := ts.Shell.handleCommand("version")
+	fmt.Println(result)
 }
 
 func (ts *TestSuiteTS) IncrementWG() {
@@ -105,5 +119,21 @@ func (ts *TestSuiteTS) checkVersion(output string) {
 func (ts *TestSuiteTS) checkHistory(output string) {
 	if !strings.Contains(strings.ToLower(output), "docker version") {
 		panic(fmt.Errorf("expected output to contain 'docker version'"))
+	}
+}
+
+func (ts *TestSuiteTS) checkDetails(output string) {
+	if !strings.Contains(strings.ToLower(output), "trysql") {
+		panic(fmt.Errorf("expected output to contain the container name 'TrySql', got '%s'", output))
+	}
+}
+
+func (ts *TestSuiteTS) checkID(output string) {
+	expects := map[string]bool{
+		"not found": true,
+		"something went wrong while trying to get the container's details": true,
+	}
+	if expects[output] {
+		panic(fmt.Errorf(output))
 	}
 }

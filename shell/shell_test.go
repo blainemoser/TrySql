@@ -32,17 +32,15 @@ func TestNew(t *testing.T) {
 
 func TestLastCommand(t *testing.T) {
 	defer utils.HandelPanic(t)
-	suite.Shell.Push("version")
-	lastCommand := suite.Shell.lastCommand()
-	if lastCommand != "version" {
-		t.Errorf("expected last command to be 'version', got '%s'", lastCommand)
+	lastOutput := suite.Shell.Push("version")
+	if !strings.Contains(strings.ToLower(lastOutput), "docker version") {
+		t.Errorf("expected last command to contain 'docker version', got '%s'", lastOutput)
 	}
 }
 
 func TestLastOutput(t *testing.T) {
 	defer utils.HandelPanic(t)
-	suite.Shell.Push("help version")
-	lastOutput := suite.Shell.LastOutput()
+	lastOutput := suite.Shell.Push("help version")
 	expects := "Gets the Docker Version"
 	if !strings.Contains(lastOutput, expects) {
 		t.Errorf("expected output to contain '%s', got '%s'", expects, lastOutput)
@@ -83,6 +81,16 @@ func TestHelp(t *testing.T) {
 func TestHistory(t *testing.T) {
 	defer utils.HandelPanic(t)
 	suite.SendHistorySignal()
+}
+
+func TestContainerDetails(t *testing.T) {
+	defer utils.HandelPanic(t)
+	suite.SendContainerDetailsSignal()
+}
+
+func TestContainerID(t *testing.T) {
+	defer utils.HandelPanic(t)
+	suite.SendContainerIDSignal()
 }
 
 func TestQuit(t *testing.T) {

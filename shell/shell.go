@@ -28,6 +28,7 @@ type TrySqlShell struct {
 	OsInterrupt  chan os.Signal
 	UserInput    chan string
 	LastCaptured chan string
+	ShellOutChan chan bool
 	StdIn        io.Reader
 	Reader       *bufio.Reader
 	WG           *sync.WaitGroup
@@ -61,6 +62,7 @@ func New(ts *trysql.TrySql) *TrySqlShell {
 		Reader:       reader,
 		WG:           &sync.WaitGroup{},
 		Buffer:       list.New(),
+		ShellOutChan: make(chan bool, 1),
 		LastCaptured: make(chan string, 1),
 	}
 }
@@ -114,6 +116,10 @@ func (c *TrySqlShell) handleCommand(command string) bool {
 		return false
 	case "quit", "exit", "q":
 		return c.quit()
+	case "container-details", "cd", "get-container-details":
+		return c.containerDetails(command)
+	case "container-id", "cid", "get-container-id":
+		return c.containerID(command)
 	case "history", "hist", "hi":
 		return c.getHistory()
 	case "docker-version", "version", "dv":
@@ -121,7 +127,7 @@ func (c *TrySqlShell) handleCommand(command string) bool {
 	case "[error]":
 		return false
 	default:
-		c.shellOutput(
+		<-c.shellOutput(
 			command,
 			fmt.Sprintf(
 				"> unrecognised command '%s'. Type 'help' for help",
@@ -143,7 +149,7 @@ func (c *TrySqlShell) quit() bool {
 
 func (c *TrySqlShell) help(command []string) {
 	result := help.Get(command)
-	c.shellOutput("help", "\n"+result+"\n", true)
+	<-c.shellOutput("help", "\n"+result+"\n", true)
 }
 
 func (c *TrySqlShell) checkHelp(command string) ([]string, bool) {
@@ -157,7 +163,7 @@ func (c *TrySqlShell) checkHelp(command string) ([]string, bool) {
 	return []string{}, false
 }
 
-func (c *TrySqlShell) shellOutput(input, msg string, hidden bool) {
+func (c *TrySqlShell) shellOutput(input, msg string, hidden bool) chan bool {
 	b := &BufferObject{
 		In:     input,
 		Out:    msg,
@@ -170,6 +176,8 @@ func (c *TrySqlShell) shellOutput(input, msg string, hidden bool) {
 	}
 	c.Buffer.PushFront(b)
 	fmt.Println(msg)
+	c.ShellOutChan <- true
+	return c.ShellOutChan
 }
 
 func (c *TrySqlShell) waitForInput() {
@@ -198,15 +206,15 @@ func (c *TrySqlShell) bufferError(err error) {
 		c.UserInput <- "[error]"
 		return
 	default:
-		c.shellOutput("[error]", "> An error occured ("+err.Error()+"), please try again", true)
+		<-c.shellOutput("[error]", "> An error occured ("+err.Error()+"), please try again", true)
 		c.UserInput <- "[error]"
 	}
 }
 
 func (c *TrySqlShell) Push(input string) string {
 	c.UserInput <- input
-	result := <-c.LastCaptured
-	return result
+	<-c.LastCaptured
+	return c.LastOutput()
 }
 
 func (c *TrySqlShell) getHistory() bool {
@@ -235,6 +243,16 @@ func (c *TrySqlShell) getHistory() bool {
 	return false
 }
 
+func (c *TrySqlShell) containerDetails(command string) bool {
+	<-c.shellOutput(command, "> "+c.TS.GetContainerDetails(false), false)
+	return false
+}
+
+func (c *TrySqlShell) containerID(command string) bool {
+	<-c.shellOutput(command, "> "+c.TS.GetContainerDetails(true), false)
+	return false
+}
+
 func (c *TrySqlShell) LastOutput() string {
 	e := c.Buffer.Front()
 	if e == nil {
@@ -250,7 +268,7 @@ func (c *TrySqlShell) LastOutput() string {
 }
 
 func (c *TrySqlShell) getVersion(command string) bool {
-	c.shellOutput(command, "> "+c.TS.DockerVersion(), false)
+	<-c.shellOutput(command, "> "+c.TS.DockerVersion(), false)
 	return false
 }
 

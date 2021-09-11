@@ -34,7 +34,7 @@ func TestInitialize(t *testing.T) {
 func TestListContainers(t *testing.T) {
 	defer utils.HandelPanic(t)
 	tInit()
-	result, err := tsql.ListContainers()
+	result, err := tsql.listContainers()
 	if err != nil {
 		t.Error(err)
 	}
@@ -56,6 +56,34 @@ func TestDockerVersion(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(result), "build") {
 		t.Error("expected to find docker version build")
+	}
+}
+
+func TestGetContainerDetails(t *testing.T) {
+	defer utils.HandelPanic(t)
+	tInit()
+	result := tsql.GetContainerDetails(false)
+	if !strings.Contains(strings.ToLower(result), "trysql") {
+		t.Errorf("expected to find the container name 'TrySql', got '%s'", result)
+	}
+	result = tsql.GetContainerDetails(true)
+	expects := map[string]bool{
+		"not found": true,
+		"something went wrong while trying to get the container's details": true,
+	}
+	if expects[result] {
+		t.Errorf(result)
+	}
+}
+
+func TestContainerRunning(t *testing.T) {
+	defer utils.HandelPanic(t)
+	result, err := tsql.containerRunning()
+	if err != nil {
+		t.Error(err)
+	}
+	if !result {
+		t.Errorf("expected container to be running")
 	}
 }
 
