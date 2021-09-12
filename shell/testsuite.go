@@ -69,6 +69,11 @@ func (ts *TestSuiteTS) SendContainerIDSignal() {
 	ts.checkID(result)
 }
 
+func (ts *TestSuiteTS) SendTempPassSignal() {
+	result := ts.Shell.Push("temp-password")
+	ts.checkTempPass(result)
+}
+
 func (ts *TestSuiteTS) SendExitSignal() {
 	ts.Shell.OsInterrupt <- os.Interrupt
 }
@@ -112,7 +117,14 @@ func (ts *TestSuiteTS) checkHelp(output string) {
 func (ts *TestSuiteTS) checkVersion(output string) {
 	version := ts.TS.DockerVersion()
 	if !strings.Contains(output, version) {
-		panic(fmt.Errorf("expected output to containt '%s'", version))
+		panic(fmt.Errorf("expected output to contain '%s'", version))
+	}
+}
+
+func (ts *TestSuiteTS) checkTempPass(output string) {
+	password := ts.TS.DockerTempPassword()
+	if len(password) < 1 {
+		panic(fmt.Errorf("temp password not set"))
 	}
 }
 

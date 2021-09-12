@@ -73,6 +73,11 @@ func TestSpecial(t *testing.T) {
 	}
 }
 
+func TestTempPass(t *testing.T) {
+	defer utils.HandelPanic(t)
+	suite.SendTempPassSignal()
+}
+
 func TestHelp(t *testing.T) {
 	defer utils.HandelPanic(t)
 	suite.SendHelpSignal()

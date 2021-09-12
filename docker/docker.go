@@ -7,8 +7,9 @@ import (
 )
 
 type Docker struct {
-	Version   string
-	RunAsSudo bool
+	Version               string
+	GeneratedRootPassword string
+	RunAsSudo             bool
 }
 
 type command struct {

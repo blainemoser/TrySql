@@ -45,6 +45,10 @@ func Initialise() *TrySql {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
+	err = ts.tempPass()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 	return ts
 }
 
@@ -65,6 +69,63 @@ func generate(owner string, configs *configs.Configs) (*TrySql, error) {
 
 func (ts *TrySql) DockerVersion() string {
 	return ts.docker.Version
+}
+
+func (ts *TrySql) DockerTempPassword() string {
+	return ts.docker.GeneratedRootPassword
+}
+
+func (ts *TrySql) setGeneratedRootPassword() error {
+	timeout := 0
+	wait := time.NewTicker(time.Millisecond * 500)
+	findLog := make(chan string, 1)
+	errLog := make(chan error, 1)
+	var passLog string
+	ts.getPassLog(findLog, errLog)
+	for {
+		select {
+		case err := <-errLog:
+			return err
+		case passLog = <-findLog:
+			ts.docker.GeneratedRootPassword = ts.extractPassword(passLog)
+			return nil
+		case <-wait.C:
+			timeout += 1
+			ts.getPassLog(findLog, errLog)
+			if timeout >= 60 {
+				return fmt.Errorf("timed out while waiting for container temporary password")
+			}
+		}
+	}
+}
+
+func (ts *TrySql) getPassLog(findLog chan string, errLog chan error) {
+	logs, err := ts.getLogs()
+	if err != nil {
+		errLog <- err
+		return
+	}
+	for _, log := range logs {
+		if strings.Contains(log, "GENERATED ROOT PASSWORD") {
+			findLog <- log
+			return
+		}
+	}
+}
+
+func (ts *TrySql) extractPassword(log string) string {
+	log = strings.Replace(log, "[Entrypoint]", "", 1)
+	log = strings.Replace(log, "GENERATED ROOT PASSWORD:", "", 1)
+	log = strings.Trim(log, " ")
+	return log
+}
+
+func (ts *TrySql) getLogs() ([]string, error) {
+	result, err := ts.outputCommand([]string{"logs", "TrySql"})
+	if err != nil {
+		return nil, err
+	}
+	return strings.Split(result, "\n"), nil
 }
 
 func (ts *TrySql) GetContainerDetails(idOnly bool) string {
@@ -118,6 +179,11 @@ func (ts *TrySql) ps() ([]string, error) {
 func (ts *TrySql) provision() error {
 	msg := "pulling up to date image"
 	return ts.waitAndWrite(ts.provisioningDocker, msg)
+}
+
+func (ts *TrySql) tempPass() error {
+	msg := "getting temporary password"
+	return ts.waitAndWrite(ts.gettingTempPassword, msg)
 }
 
 func (ts *TrySql) containerRunning() (bool, error) {
@@ -281,6 +347,11 @@ func (ts *TrySql) provisioningDocker(wg *sync.WaitGroup, initChan chan error) {
 	defer wg.Done()
 	_, err := ts.outputCommand([]string{"pull", ts.image})
 	initChan <- err
+}
+
+func (ts *TrySql) gettingTempPassword(wg *sync.WaitGroup, initChan chan error) {
+	defer wg.Done()
+	initChan <- ts.setGeneratedRootPassword()
 }
 
 func (ts *TrySql) stoppingContainer(wg *sync.WaitGroup, initChan chan error) {

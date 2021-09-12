@@ -118,6 +118,8 @@ func (c *TrySqlShell) handleCommand(command string) bool {
 		return c.quit()
 	case "container-details", "cd", "get-container-details":
 		return c.containerDetails(command)
+	case "temp-password", "tp", "get-temporary-password":
+		return c.tempPassword(command)
 	case "container-id", "cid", "get-container-id":
 		return c.containerID(command)
 	case "history", "hist", "hi":
@@ -250,6 +252,11 @@ func (c *TrySqlShell) containerDetails(command string) bool {
 
 func (c *TrySqlShell) containerID(command string) bool {
 	<-c.shellOutput(command, "> "+c.TS.GetContainerDetails(true), false)
+	return false
+}
+
+func (c *TrySqlShell) tempPassword(command string) bool {
+	<-c.shellOutput(command, "> "+c.TS.DockerTempPassword(), false)
 	return false
 }
 
