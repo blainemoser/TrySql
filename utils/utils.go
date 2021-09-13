@@ -3,12 +3,15 @@ package utils
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
 )
+
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 func GetProcessOwner() string {
 	stdout, err := exec.Command("ps", "-o", "user=", "-p", strconv.Itoa(os.Getpid())).Output()
@@ -48,4 +51,18 @@ func HandelPanic(t *testing.T) {
 	if r != nil {
 		t.Error(r)
 	}
+}
+
+// MakeBearer creates a bearer token
+func MakePass() (string, []byte) {
+	bytes := randBytes(32)
+	return string(bytes), bytes
+}
+
+func randBytes(n int) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	return b
 }

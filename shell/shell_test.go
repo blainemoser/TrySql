@@ -32,7 +32,9 @@ func TestNew(t *testing.T) {
 
 func TestLastCommand(t *testing.T) {
 	defer utils.HandelPanic(t)
-	lastOutput := suite.Shell.Push("version")
+	suite.Shell.Push("version")
+	<-suite.Shell.ShellOutChan
+	lastOutput := suite.Shell.LastOutput()
 	if !strings.Contains(strings.ToLower(lastOutput), "docker version") {
 		t.Errorf("expected last command to contain 'docker version', got '%s'", lastOutput)
 	}
@@ -40,7 +42,9 @@ func TestLastCommand(t *testing.T) {
 
 func TestLastOutput(t *testing.T) {
 	defer utils.HandelPanic(t)
-	lastOutput := suite.Shell.Push("help version")
+	suite.Shell.Push("help version")
+	<-suite.Shell.ShellOutChan
+	lastOutput := suite.Shell.LastOutput()
 	expects := "Gets the Docker Version"
 	if !strings.Contains(lastOutput, expects) {
 		t.Errorf("expected output to contain '%s', got '%s'", expects, lastOutput)
@@ -61,6 +65,7 @@ func TestSanitize(t *testing.T) {
 
 func TestSpecial(t *testing.T) {
 	suite.Shell.Push("version")
+	<-suite.Shell.ShellOutChan
 	testString := string([]byte{27, 91, 65, 10})
 	suite.Shell.special(&testString)
 	if testString != "version" {
@@ -75,12 +80,17 @@ func TestSpecial(t *testing.T) {
 
 func TestTempPass(t *testing.T) {
 	defer utils.HandelPanic(t)
-	suite.SendTempPassSignal()
+	<-suite.SendTempPassSignal()
+}
+
+func TestPass(t *testing.T) {
+	defer utils.HandelPanic(t)
+	<-suite.SendPassSignal()
 }
 
 func TestHelp(t *testing.T) {
 	defer utils.HandelPanic(t)
-	suite.SendHelpSignal()
+	<-suite.SendHelpSignal()
 }
 
 func TestHistory(t *testing.T) {
@@ -88,22 +98,23 @@ func TestHistory(t *testing.T) {
 	suite.SendHistorySignal()
 }
 
+func TestQuery(t *testing.T) {
+	defer utils.HandelPanic(t)
+	<-suite.SendQuerySignal()
+}
+
 func TestContainerDetails(t *testing.T) {
 	defer utils.HandelPanic(t)
-	suite.SendContainerDetailsSignal()
+	<-suite.SendContainerDetailsSignal()
 }
 
 func TestContainerID(t *testing.T) {
 	defer utils.HandelPanic(t)
-	suite.SendContainerIDSignal()
+	<-suite.SendContainerIDSignal()
 }
 
 func TestQuit(t *testing.T) {
 	defer utils.HandelPanic(t)
 	suite.IncrementWG()
 	suite.SendExitSignal()
-}
-
-func TestStart(t *testing.T) {
-	defer utils.HandelPanic(t)
 }

@@ -19,7 +19,7 @@ var info map[string]map[string]interface{} = map[string]map[string]interface{}{
 		"info":  "Gets the Docker Version",
 	},
 	"quit": {
-		"alias": []string{"q", "exit"},
+		"alias": []string{"exit"},
 		"info":  "Quits the shell",
 	},
 	"container-details": {
@@ -34,6 +34,14 @@ var info map[string]map[string]interface{} = map[string]map[string]interface{}{
 		"alias": []string{"tp", "get-temporary-password"},
 		"info":  "Gets the TrySql container's temporary ROOT password",
 	},
+	"password": {
+		"alias": []string{"p", "get-password"},
+		"info":  "Gets the TrySql container's ROOT password",
+	},
+	"query": {
+		"alias": []string{"q"},
+		"info":  "Executes a query against MySQL",
+	},
 }
 
 var alias map[string]string = map[string]string{
@@ -45,7 +53,6 @@ var alias map[string]string = map[string]string{
 	"version":                "docker-version",
 	"dv":                     "docker-version",
 	"quit":                   "quit",
-	"q":                      "quit",
 	"exit":                   "quit",
 	"container-details":      "container-details",
 	"cd":                     "container-details",
@@ -56,6 +63,11 @@ var alias map[string]string = map[string]string{
 	"temp-password":          "temp-password",
 	"tp":                     "temp-password",
 	"get-temporary-password": "temp-password",
+	"password":               "password",
+	"p":                      "password",
+	"get-password":           "password",
+	"query":                  "query",
+	"q":                      "query",
 }
 
 func Get(args []string) string {

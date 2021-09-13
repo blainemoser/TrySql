@@ -25,17 +25,6 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestHelp(t *testing.T) {
+func TestRun(t *testing.T) {
 	defer utils.HandelPanic(t)
-	suite.SendHelpSignal()
-}
-
-func TestVersion(t *testing.T) {
-	defer utils.HandelPanic(t)
-	suite.SendVersionSignal()
-}
-
-func TestHistory(t *testing.T) {
-	defer utils.HandelPanic(t)
-	suite.SendHistorySignal()
 }

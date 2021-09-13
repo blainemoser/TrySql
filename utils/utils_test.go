@@ -42,6 +42,13 @@ func TestHandlePanic(t *testing.T) {
 	triggerPanic(nt)
 }
 
+func TestMakePass(t *testing.T) {
+	_, bytes := MakePass()
+	if len(bytes) != 32 {
+		t.Errorf("expected password to have 32 characters, has %d", len(bytes))
+	}
+}
+
 func triggerPanic(nt *testing.T) {
 	panic(fmt.Errorf("test panic"))
 }

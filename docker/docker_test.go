@@ -73,3 +73,13 @@ func TestExec(t *testing.T) {
 		t.Errorf("expected result to contain a container id header")
 	}
 }
+
+func TestExecRaw(t *testing.T) {
+	result, err := docker.Com().ExecRaw("container ls -al")
+	if err != nil {
+		t.Error(err)
+	}
+	if !strings.Contains(result, "CONTAINER ID") {
+		t.Errorf("expected result to contain a container id header")
+	}
+}

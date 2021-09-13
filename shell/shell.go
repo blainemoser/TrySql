@@ -19,6 +19,7 @@ import (
 )
 
 var Testing bool
+var TestHistoryOutput string
 
 const timeFormat string = "15:04:05"
 const shellVersion string = "1.0.0"
@@ -111,10 +112,14 @@ func (c *TrySqlShell) handleCommand(command string) bool {
 		c.help(commandSplit)
 		return false
 	}
+	if commandSplit, ok := c.checkQuery(command); ok {
+		c.query(commandSplit)
+		return false
+	}
 	switch command {
 	case "":
 		return false
-	case "quit", "exit", "q":
+	case "quit", "exit":
 		return c.quit()
 	case "container-details", "cd", "get-container-details":
 		return c.containerDetails(command)
@@ -122,6 +127,8 @@ func (c *TrySqlShell) handleCommand(command string) bool {
 		return c.tempPassword(command)
 	case "container-id", "cid", "get-container-id":
 		return c.containerID(command)
+	case "password", "p", "get-password":
+		return c.password(command)
 	case "history", "hist", "hi":
 		return c.getHistory()
 	case "docker-version", "version", "dv":
@@ -129,7 +136,7 @@ func (c *TrySqlShell) handleCommand(command string) bool {
 	case "[error]":
 		return false
 	default:
-		<-c.shellOutput(
+		c.waitForShellOutput(
 			command,
 			fmt.Sprintf(
 				"> unrecognised command '%s'. Type 'help' for help",
@@ -151,18 +158,58 @@ func (c *TrySqlShell) quit() bool {
 
 func (c *TrySqlShell) help(command []string) {
 	result := help.Get(command)
-	<-c.shellOutput("help", "\n"+result+"\n", true)
+	c.waitForShellOutput("help", "\n"+result+"\n", true)
+}
+
+func (c *TrySqlShell) query(command []string) {
+	if len(command) < 2 {
+		return
+	}
+	query := c.getQuery(command)
+	result, err := c.TS.Query(query, true)
+	if err != nil {
+		result = err.Error()
+	}
+	c.waitForShellOutput(command[0], result, true)
+}
+
+func (c *TrySqlShell) getQuery(command []string) string {
+	command = command[1:]
+	result := make([]string, len(command))
+	for i := 0; i < len(command); i++ {
+		result[i] = strings.Trim(command[i], "\"")
+	}
+	return strings.Join(result, " ")
 }
 
 func (c *TrySqlShell) checkHelp(command string) ([]string, bool) {
+	return c.checkFirst(command, []string{"help", "h"})
+}
+
+func (c *TrySqlShell) checkQuery(command string) ([]string, bool) {
+	return c.checkFirst(command, []string{"query", "q"})
+}
+
+func (c *TrySqlShell) checkFirst(command string, check []string) ([]string, bool) {
 	split := strings.Split(command, " ")
 	if len(split) < 1 {
 		return []string{}, false
 	}
-	if split[0] == "help" || split[0] == "h" {
-		return split, true
+	for _, v := range check {
+		if split[0] == v {
+			return split, true
+		}
 	}
 	return []string{}, false
+}
+
+func (c *TrySqlShell) waitForShellOutput(input, msg string, hidden bool) {
+	if Testing {
+		c.shellOutput(input, msg, hidden)
+		return
+	}
+	// if not in testing drain the channel
+	<-c.shellOutput(input, msg, hidden)
 }
 
 func (c *TrySqlShell) shellOutput(input, msg string, hidden bool) chan bool {
@@ -208,15 +255,13 @@ func (c *TrySqlShell) bufferError(err error) {
 		c.UserInput <- "[error]"
 		return
 	default:
-		<-c.shellOutput("[error]", "> An error occured ("+err.Error()+"), please try again", true)
-		c.UserInput <- "[error]"
+		c.waitForShellOutput("[error]", "> An error occured ("+err.Error()+"), please try again", true)
 	}
 }
 
-func (c *TrySqlShell) Push(input string) string {
+func (c *TrySqlShell) Push(input string) {
 	c.UserInput <- input
 	<-c.LastCaptured
-	return c.LastOutput()
 }
 
 func (c *TrySqlShell) getHistory() bool {
@@ -242,21 +287,29 @@ func (c *TrySqlShell) getHistory() bool {
 	if len(message) > 0 {
 		fmt.Println(message)
 	}
+	if Testing {
+		TestHistoryOutput = message
+	}
 	return false
 }
 
 func (c *TrySqlShell) containerDetails(command string) bool {
-	<-c.shellOutput(command, "> "+c.TS.GetContainerDetails(false), false)
+	c.waitForShellOutput(command, "> "+c.TS.GetContainerDetails(false), false)
 	return false
 }
 
 func (c *TrySqlShell) containerID(command string) bool {
-	<-c.shellOutput(command, "> "+c.TS.GetContainerDetails(true), false)
+	c.waitForShellOutput(command, "> "+c.TS.GetContainerDetails(true), false)
+	return false
+}
+
+func (c *TrySqlShell) password(command string) bool {
+	c.waitForShellOutput(command, "> "+c.TS.CurrentPassword(), false)
 	return false
 }
 
 func (c *TrySqlShell) tempPassword(command string) bool {
-	<-c.shellOutput(command, "> "+c.TS.DockerTempPassword(), false)
+	c.waitForShellOutput(command, "> "+c.TS.DockerTempPassword(), false)
 	return false
 }
 
@@ -275,7 +328,7 @@ func (c *TrySqlShell) LastOutput() string {
 }
 
 func (c *TrySqlShell) getVersion(command string) bool {
-	<-c.shellOutput(command, "> "+c.TS.DockerVersion(), false)
+	c.waitForShellOutput(command, "> "+c.TS.DockerVersion(), false)
 	return false
 }
 

@@ -34,7 +34,7 @@ func TestInitialize(t *testing.T) {
 func TestListContainers(t *testing.T) {
 	defer utils.HandelPanic(t)
 	tInit()
-	result, err := tsql.listContainers()
+	result, err := tsql.listContainers(false)
 	if err != nil {
 		t.Error(err)
 	}
@@ -59,6 +59,19 @@ func TestDockerVersion(t *testing.T) {
 	}
 }
 
+func TestPassword(t *testing.T) {
+	defer utils.HandelPanic(t)
+	tInit()
+	result := tsql.CurrentPassword()
+	if len(result) != 32 {
+		t.Errorf("expected password to be 32 characters, got %d", len(result))
+	}
+	temp := tsql.DockerTempPassword()
+	if result == temp {
+		t.Errorf("expected temp password to be different from new password")
+	}
+}
+
 func TestGetContainerDetails(t *testing.T) {
 	defer utils.HandelPanic(t)
 	tInit()
@@ -73,6 +86,25 @@ func TestGetContainerDetails(t *testing.T) {
 	}
 	if expects[result] {
 		t.Errorf(result)
+	}
+}
+
+func TestMysqlArgs(t *testing.T) {
+	defer utils.HandelPanic(t)
+	result := tsql.mysqlArgs("QUERY")
+	if !strings.Contains(result, "--execute=\"QUERY\"") {
+		t.Errorf("expected raw string to contain '--execute=\"QUERY\"', got %s", result)
+	}
+}
+
+func TestQuery(t *testing.T) {
+	defer utils.HandelPanic(t)
+	result, err := tsql.Query("SHOW VARIABLES LIKE 'max_connections'", true)
+	if err != nil {
+		t.Error(err)
+	}
+	if !strings.Contains(result, "Variable_name") {
+		t.Errorf("expected result to contain 'Variable_name', got '%s'", result)
 	}
 }
 

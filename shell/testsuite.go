@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/blainemoser/TrySql/help"
 	"github.com/blainemoser/TrySql/trysql"
@@ -14,6 +13,16 @@ import (
 type TestSuiteTS struct {
 	Shell *TrySqlShell
 	TS    *trysql.TrySql
+}
+
+func (ts *TestSuiteTS) HandlePanic() {
+	r := recover()
+	if r != nil {
+		if ts.Shell != nil && len(ts.Shell.ShellOutChan) > 0 {
+			<-ts.Shell.ShellOutChan
+		}
+		panic(r)
+	}
 }
 
 func InitialiseTestSuite() (*TestSuiteTS, error) {
@@ -40,47 +49,60 @@ func (ts *TestSuiteTS) Stop() error {
 	return nil
 }
 
-func (ts *TestSuiteTS) SendHelpSignal() {
-	result := ts.Shell.Push("help")
-	ts.checkHelp(result)
+func (ts *TestSuiteTS) sendSignal(funcCall interface{}, signal string) chan bool {
+	defer ts.HandlePanic()
+	waitChan := make(chan bool, 1)
+	ts.Shell.Push(signal)
+	<-ts.Shell.ShellOutChan
+	result := ts.Shell.LastOutput()
+	ts.check(funcCall, waitChan, result)
+	return waitChan
 }
 
-func (ts *TestSuiteTS) SendVersionSignal() {
-	result := ts.Shell.Push("version")
-	ts.checkVersion(result)
+func (ts *TestSuiteTS) check(funcInterface interface{}, waitChan chan bool, check string) {
+	functionCall, ok := (funcInterface).(func(chan bool, string))
+	if !ok {
+		panic(fmt.Errorf("invalid function provided"))
+	}
+	functionCall(waitChan, check)
+}
+
+func (ts *TestSuiteTS) SendHelpSignal() chan bool {
+	return ts.sendSignal(ts.checkHelp, "help")
+}
+
+func (ts *TestSuiteTS) SendVersionSignal() chan bool {
+	return ts.sendSignal(ts.checkVersion, "version")
 }
 
 func (ts *TestSuiteTS) SendHistorySignal() {
-	result := ts.Shell.Push("version")
+	<-ts.SendVersionSignal()
 	ts.Shell.Push("history")
-	ts.checkHistory(result)
+	ts.checkHistory()
 }
 
-func (ts *TestSuiteTS) SendContainerDetailsSignal() {
-	result := ts.Shell.Push("cd")
-	fmt.Println(result)
-	time.Sleep(time.Second * 1)
-	result = ts.Shell.LastOutput()
-	ts.checkDetails(result)
+func (ts *TestSuiteTS) SendContainerDetailsSignal() chan bool {
+	return ts.sendSignal(ts.checkDetails, "cd")
 }
 
-func (ts *TestSuiteTS) SendContainerIDSignal() {
-	result := ts.Shell.Push("cid")
-	ts.checkID(result)
+func (ts *TestSuiteTS) SendContainerIDSignal() chan bool {
+	return ts.sendSignal(ts.checkID, "cid")
 }
 
-func (ts *TestSuiteTS) SendTempPassSignal() {
-	result := ts.Shell.Push("temp-password")
-	ts.checkTempPass(result)
+func (ts *TestSuiteTS) SendTempPassSignal() chan bool {
+	return ts.sendSignal(ts.checkTempPass, "temp-password")
+}
+
+func (ts *TestSuiteTS) SendPassSignal() chan bool {
+	return ts.sendSignal(ts.checkPass, "password")
+}
+
+func (ts *TestSuiteTS) SendQuerySignal() chan bool {
+	return ts.sendSignal(ts.checkQuery, "query SHOW VARIABLES LIKE 'max_connections'")
 }
 
 func (ts *TestSuiteTS) SendExitSignal() {
 	ts.Shell.OsInterrupt <- os.Interrupt
-}
-
-func (ts *TestSuiteTS) SendQuit() {
-	result := ts.Shell.handleCommand("version")
-	fmt.Println(result)
 }
 
 func (ts *TestSuiteTS) IncrementWG() {
@@ -91,7 +113,7 @@ func (ts *TestSuiteTS) DecrementWG() {
 	ts.Shell.WG.Done()
 }
 
-func (ts *TestSuiteTS) checkHelp(output string) {
+func (ts *TestSuiteTS) checkHelp(waitChan chan bool, output string) {
 	help := help.Get([]string{"help"})
 	helpSplit := strings.Split(help, "\n\n")
 	var errs []error
@@ -112,35 +134,54 @@ func (ts *TestSuiteTS) checkHelp(output string) {
 	if err != nil {
 		panic(err)
 	}
+	waitChan <- true
 }
 
-func (ts *TestSuiteTS) checkVersion(output string) {
+func (ts *TestSuiteTS) checkVersion(waitChan chan bool, output string) {
 	version := ts.TS.DockerVersion()
 	if !strings.Contains(output, version) {
 		panic(fmt.Errorf("expected output to contain '%s'", version))
 	}
+	waitChan <- true
 }
 
-func (ts *TestSuiteTS) checkTempPass(output string) {
+func (ts *TestSuiteTS) checkTempPass(waitChan chan bool, output string) {
 	password := ts.TS.DockerTempPassword()
 	if len(password) < 1 {
 		panic(fmt.Errorf("temp password not set"))
 	}
+	waitChan <- true
 }
 
-func (ts *TestSuiteTS) checkHistory(output string) {
-	if !strings.Contains(strings.ToLower(output), "docker version") {
+func (ts *TestSuiteTS) checkPass(waitChan chan bool, output string) {
+	password := ts.TS.CurrentPassword()
+	if len(password) < 1 {
+		panic(fmt.Errorf("password not set"))
+	}
+	waitChan <- true
+}
+
+func (ts *TestSuiteTS) checkQuery(waitChan chan bool, output string) {
+	if !strings.Contains(strings.ReplaceAll(output, "\n", " "), "Variable_name") {
+		panic(fmt.Errorf("expected output to contain 'Variable_name'"))
+	}
+	waitChan <- true
+}
+
+func (ts *TestSuiteTS) checkHistory() {
+	if !strings.Contains(strings.ToLower(TestHistoryOutput), "docker version") {
 		panic(fmt.Errorf("expected output to contain 'docker version'"))
 	}
 }
 
-func (ts *TestSuiteTS) checkDetails(output string) {
+func (ts *TestSuiteTS) checkDetails(waitChan chan bool, output string) {
 	if !strings.Contains(strings.ToLower(output), "trysql") {
 		panic(fmt.Errorf("expected output to contain the container name 'TrySql', got '%s'", output))
 	}
+	waitChan <- true
 }
 
-func (ts *TestSuiteTS) checkID(output string) {
+func (ts *TestSuiteTS) checkID(waitChan chan bool, output string) {
 	expects := map[string]bool{
 		"not found": true,
 		"something went wrong while trying to get the container's details": true,
@@ -148,4 +189,5 @@ func (ts *TestSuiteTS) checkID(output string) {
 	if expects[output] {
 		panic(fmt.Errorf(output))
 	}
+	waitChan <- true
 }

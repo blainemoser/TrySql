@@ -39,14 +39,22 @@ func Initialise() *TrySql {
 	fmt.Println("found " + string(ts.DockerVersion()))
 	err = ts.provision()
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Fatal("could not provision container - " + err.Error())
 	}
 	err = ts.run()
 	if err != nil {
+		log.Fatal("could not run container - " + err.Error())
+	}
+	err = ts.waitForHealthy()
+	if err != nil {
 		log.Fatal(err.Error())
 	}
-	err = ts.tempPass()
+	err = ts.setNewPass()
 	if err != nil {
+		tdErr := ts.TearDown()
+		if tdErr != nil {
+			log.Fatal(tdErr)
+		}
 		log.Fatal(err.Error())
 	}
 	return ts
@@ -75,57 +83,49 @@ func (ts *TrySql) DockerTempPassword() string {
 	return ts.docker.GeneratedRootPassword
 }
 
-func (ts *TrySql) setGeneratedRootPassword() error {
-	timeout := 0
-	wait := time.NewTicker(time.Millisecond * 500)
-	findLog := make(chan string, 1)
-	errLog := make(chan error, 1)
-	var passLog string
-	ts.getPassLog(findLog, errLog)
-	for {
-		select {
-		case err := <-errLog:
-			return err
-		case passLog = <-findLog:
-			ts.docker.GeneratedRootPassword = ts.extractPassword(passLog)
-			return nil
-		case <-wait.C:
-			timeout += 1
-			ts.getPassLog(findLog, errLog)
-			if timeout >= 60 {
-				return fmt.Errorf("timed out while waiting for container temporary password")
-			}
+func (ts *TrySql) Query(query string, report bool) (string, error) {
+	result, err := ts.outputCommandRaw(ts.mysqlArgs(query))
+	if err != nil {
+		errString := strings.ReplaceAll(err.Error(), "\n", " | ")
+		if strings.Contains(err.Error(), "ERROR") {
+			return result, errors.New(errString)
+		}
+		if report {
+			result = result + " | " + errString
 		}
 	}
+	return result, nil
 }
 
-func (ts *TrySql) getPassLog(findLog chan string, errLog chan error) {
-	logs, err := ts.getLogs()
+func (ts *TrySql) TearDown() error {
+	running, err := ts.containerRunning()
+	if !running {
+		return nil
+	}
 	if err != nil {
-		errLog <- err
-		return
+		return err
 	}
-	for _, log := range logs {
-		if strings.Contains(log, "GENERATED ROOT PASSWORD") {
-			findLog <- log
-			return
-		}
-	}
-}
-
-func (ts *TrySql) extractPassword(log string) string {
-	log = strings.Replace(log, "[Entrypoint]", "", 1)
-	log = strings.Replace(log, "GENERATED ROOT PASSWORD:", "", 1)
-	log = strings.Trim(log, " ")
-	return log
-}
-
-func (ts *TrySql) getLogs() ([]string, error) {
-	result, err := ts.outputCommand([]string{"logs", "TrySql"})
+	fmt.Println("tearing down")
+	err = ts.waitAndWrite(ts.stoppingContainer, "stopping container")
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return strings.Split(result, "\n"), nil
+	return ts.waitAndWrite(ts.removingContainer, "removing container")
+}
+
+func (ts *TrySql) CurrentPassword() string {
+	if ts.docker.CurrentPassword == "" {
+		return ts.DockerTempPassword()
+	}
+	return ts.docker.CurrentPassword
+}
+
+func (ts *TrySql) mysqlArgs(query string) string {
+	return fmt.Sprintf(
+		"exec TrySql mysql --user=root --password=\"%s\" --execute=\"%s\" --connect-expired-password",
+		ts.CurrentPassword(),
+		query,
+	)
 }
 
 func (ts *TrySql) GetContainerDetails(idOnly bool) string {
@@ -144,8 +144,91 @@ func (ts *TrySql) GetContainerDetails(idOnly bool) string {
 	return result
 }
 
-func (ts *TrySql) listContainers() ([]string, error) {
-	containers, err := ts.outputCommand([]string{"container", "ls"})
+func (ts *TrySql) setHealthyStatus() error {
+	timeout := 0
+	wait := time.NewTicker(time.Second)
+	status := make(chan bool, 1)
+	errLog := make(chan error, 1)
+	ts.getHealthStatus(status, errLog)
+	for {
+		select {
+		case err := <-errLog:
+			return err
+		case <-status:
+			return nil
+		case <-wait.C:
+			timeout += 1
+			ts.getHealthStatus(status, errLog)
+			if timeout >= 120 {
+				return fmt.Errorf("timed out while waiting for container temporary password")
+			}
+		}
+	}
+}
+
+func (ts *TrySql) getHealthStatus(status chan bool, errorChan chan error) {
+	details := ts.GetContainerDetails(false)
+	details = strings.ToLower(details)
+	if strings.Contains(details, "(health: starting)") {
+		return
+	}
+	if strings.Contains(details, "(healthy)") {
+		status <- true
+		return
+	}
+	errorChan <- errors.New("no startup activity on container")
+}
+
+func (ts *TrySql) setNewPass() error {
+	err := ts.getPassLog()
+	if err != nil {
+		return err
+	}
+	newPass, _ := utils.MakePass()
+	result, err := ts.Query("ALTER USER 'root'@'localhost' IDENTIFIED BY '"+newPass+"';", true)
+	fmt.Println(result)
+	if err != nil {
+		return err
+	}
+	ts.docker.CurrentPassword = newPass
+	return nil
+}
+
+func (ts *TrySql) getPassLog() error {
+	logs, err := ts.getLogs()
+	if err != nil {
+		return err
+	}
+	for _, log := range logs {
+		if strings.Contains(log, "GENERATED ROOT PASSWORD") {
+			ts.docker.GeneratedRootPassword = ts.extractPassword(log)
+			return nil
+		}
+	}
+	return errors.New("temp password not found")
+}
+
+func (ts *TrySql) extractPassword(log string) string {
+	log = strings.Replace(log, "[Entrypoint]", "", 1)
+	log = strings.Replace(log, "GENERATED ROOT PASSWORD:", "", 1)
+	log = strings.Trim(log, " ")
+	return log
+}
+
+func (ts *TrySql) getLogs() ([]string, error) {
+	result, err := ts.outputCommand([]string{"logs", "TrySql"})
+	if err != nil {
+		return nil, err
+	}
+	return strings.Split(result, "\n"), nil
+}
+
+func (ts *TrySql) listContainers(all bool) ([]string, error) {
+	args := []string{"container", "ls"}
+	if all {
+		args = append(args, "-al")
+	}
+	containers, err := ts.outputCommand(args)
 	if err != nil {
 		return nil, err
 	}
@@ -181,13 +264,13 @@ func (ts *TrySql) provision() error {
 	return ts.waitAndWrite(ts.provisioningDocker, msg)
 }
 
-func (ts *TrySql) tempPass() error {
-	msg := "getting temporary password"
-	return ts.waitAndWrite(ts.gettingTempPassword, msg)
+func (ts *TrySql) waitForHealthy() error {
+	msg := "waiting for container to set up"
+	return ts.waitAndWrite(ts.waitingForHealtyStatus, msg)
 }
 
 func (ts *TrySql) containerRunning() (bool, error) {
-	exists, err := ts.containerExists()
+	exists, err := ts.containerExists(false)
 	if err != nil {
 		return false, err
 	}
@@ -206,24 +289,8 @@ func (ts *TrySql) containerRunning() (bool, error) {
 	return true, nil
 }
 
-func (ts *TrySql) TearDown() error {
-	running, err := ts.containerRunning()
-	if !running {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	fmt.Println("tearing down")
-	err = ts.waitAndWrite(ts.stoppingContainer, "stopping container")
-	if err != nil {
-		return err
-	}
-	return ts.waitAndWrite(ts.removingContainer, "removing container")
-}
-
 func (ts *TrySql) run() error {
-	running, err := ts.containerExists()
+	running, err := ts.containerExists(false)
 	if err != nil {
 		return err
 	}
@@ -266,8 +333,8 @@ func (ts *TrySql) findContainer(containers []string) (string, error) {
 	return "", errors.New("not found")
 }
 
-func (ts *TrySql) containerExists() (bool, error) {
-	containers, err := ts.listContainers()
+func (ts *TrySql) containerExists(all bool) (bool, error) {
+	containers, err := ts.listContainers(all)
 	if err != nil {
 		return false, err
 	}
@@ -337,10 +404,32 @@ func (ts *TrySql) wait(wg *sync.WaitGroup, initChan chan error, writer *uilive.W
 
 func (ts *TrySql) settingUpContainer(wg *sync.WaitGroup, initChan chan error) {
 	defer wg.Done()
-	result, err := ts.outputCommand([]string{"run", "-d", "--name=TrySql", ts.image})
+	err := ts.needsCleanup()
+	if err != nil {
+		initChan <- err
+		return
+	}
+	result, err := ts.outputCommand([]string{"run", "-d", "-e", "3306", "-p", "6603:3306", "--name=TrySql", ts.image})
 	ts.hash = result
 	ts.ReadyState = 1
 	initChan <- err
+}
+
+func (ts *TrySql) needsCleanup() error {
+	exists, err := ts.containerExists(true)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	return ts.cleanUp()
+}
+
+func (ts *TrySql) cleanUp() error {
+	ts.outputCommand([]string{"stop", "TrySql"})
+	_, err := ts.outputCommand([]string{"rm", "TrySql"})
+	return err
 }
 
 func (ts *TrySql) provisioningDocker(wg *sync.WaitGroup, initChan chan error) {
@@ -349,9 +438,9 @@ func (ts *TrySql) provisioningDocker(wg *sync.WaitGroup, initChan chan error) {
 	initChan <- err
 }
 
-func (ts *TrySql) gettingTempPassword(wg *sync.WaitGroup, initChan chan error) {
+func (ts *TrySql) waitingForHealtyStatus(wg *sync.WaitGroup, initChan chan error) {
 	defer wg.Done()
-	initChan <- ts.setGeneratedRootPassword()
+	initChan <- ts.setHealthyStatus()
 }
 
 func (ts *TrySql) stoppingContainer(wg *sync.WaitGroup, initChan chan error) {
@@ -368,6 +457,14 @@ func (ts *TrySql) removingContainer(wg *sync.WaitGroup, initChan chan error) {
 
 func (ts *TrySql) outputCommand(args []string) (string, error) {
 	result, err := ts.docker.Com().Args(args).Exec()
+	if err != nil {
+		return "", err
+	}
+	return result, nil
+}
+
+func (ts *TrySql) outputCommandRaw(arg string) (string, error) {
+	result, err := ts.docker.Com().ExecRaw(arg)
 	if err != nil {
 		return "", err
 	}
