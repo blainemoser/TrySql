@@ -170,7 +170,7 @@ func (c *TrySqlShell) query(command []string) {
 	if err != nil {
 		result = err.Error()
 	}
-	c.waitForShellOutput(command[0], result, true)
+	c.waitForShellOutput(command[0]+" "+query, result, false)
 }
 
 func (c *TrySqlShell) getQuery(command []string) string {
