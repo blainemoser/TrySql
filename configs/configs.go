@@ -30,6 +30,8 @@ func expected() map[string]string {
 		"version":     "MysqlVersion",
 		"bs":          "BufferSize",
 		"buffer-size": "BufferSize",
+		"port":        "Port",
+		"p":           "Port",
 	}
 }
 
@@ -89,6 +91,17 @@ func (c *Configs) GetMysqlVersion() string {
 		return c.inputs["MysqlVersion"][0]
 	}
 	return "latest"
+}
+
+func (c *Configs) GetPort() int {
+	if c.inputs["Port"] != nil && len(c.inputs["Port"]) > 0 {
+		port, err := strconv.Atoi(c.inputs["Port"][0])
+		if err != nil {
+			return 6603
+		}
+		return port
+	}
+	return 6603
 }
 
 func (c *Configs) GetBufferSize() int {

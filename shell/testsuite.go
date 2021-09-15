@@ -89,16 +89,20 @@ func (ts *TestSuiteTS) SendContainerIDSignal() chan bool {
 	return ts.sendSignal(ts.checkID, "cid")
 }
 
-func (ts *TestSuiteTS) SendTempPassSignal() chan bool {
-	return ts.sendSignal(ts.checkTempPass, "temp-password")
-}
-
 func (ts *TestSuiteTS) SendPassSignal() chan bool {
 	return ts.sendSignal(ts.checkPass, "password")
 }
 
 func (ts *TestSuiteTS) SendQuerySignal() chan bool {
 	return ts.sendSignal(ts.checkQuery, "query SHOW VARIABLES LIKE 'max_connections'")
+}
+
+func (ts *TestSuiteTS) SendDetailsSignal() chan bool {
+	return ts.sendSignal(ts.checkInspectDetails, "details Id State/Health")
+}
+
+func (ts *TestSuiteTS) SendMySQLCommandSignal() chan bool {
+	return ts.sendSignal(ts.checkMySQLCommandDetails, "mysql")
 }
 
 func (ts *TestSuiteTS) SendExitSignal() {
@@ -145,16 +149,8 @@ func (ts *TestSuiteTS) checkVersion(waitChan chan bool, output string) {
 	waitChan <- true
 }
 
-func (ts *TestSuiteTS) checkTempPass(waitChan chan bool, output string) {
-	password := ts.TS.DockerTempPassword()
-	if len(password) < 1 {
-		panic(fmt.Errorf("temp password not set"))
-	}
-	waitChan <- true
-}
-
 func (ts *TestSuiteTS) checkPass(waitChan chan bool, output string) {
-	password := ts.TS.CurrentPassword()
+	password := ts.TS.Password()
 	if len(password) < 1 {
 		panic(fmt.Errorf("password not set"))
 	}
@@ -164,6 +160,31 @@ func (ts *TestSuiteTS) checkPass(waitChan chan bool, output string) {
 func (ts *TestSuiteTS) checkQuery(waitChan chan bool, output string) {
 	if !strings.Contains(strings.ReplaceAll(output, "\n", " "), "Variable_name") {
 		panic(fmt.Errorf("expected output to contain 'Variable_name'"))
+	}
+	waitChan <- true
+}
+
+func (ts *TestSuiteTS) checkInspectDetails(waitChan chan bool, output string) {
+	if !strings.Contains(output, "Id:") {
+		panic(fmt.Errorf("expected output to contain 'Id:', got %s", output))
+	}
+	if !strings.Contains(output, "State/Health:") {
+		panic(fmt.Errorf("expected output to contain 'State/Health:', got %s", output))
+	}
+	if !strings.Contains(output, "\"Status\": \"healthy\"") {
+		panic(fmt.Errorf("expected output to contain '\"Status\": \"healthy\"', got %s", output))
+	}
+	waitChan <- true
+}
+
+func (ts *TestSuiteTS) checkMySQLCommandDetails(waitChan chan bool, output string) {
+	expects := fmt.Sprintf(
+		"mysql -uroot -p%s -h127.0.0.1 -P%s",
+		ts.TS.Password(),
+		ts.TS.HostPortStr(),
+	)
+	if strings.Replace(output, "> ", "", 1) != expects {
+		panic(fmt.Errorf("expected mysql command to be %s, got %s", expects, output))
 	}
 	waitChan <- true
 }

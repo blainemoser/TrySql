@@ -8,7 +8,7 @@ import (
 )
 
 func TestConfigs(t *testing.T) {
-	configs, err := New([]string{"--version", "latest", "--buffer-size", "100"})
+	configs, err := New([]string{"--version", "latest", "--buffer-size", "100", "port", "33060"})
 	if err != nil {
 		t.Error(err)
 	}
@@ -16,7 +16,7 @@ func TestConfigs(t *testing.T) {
 }
 
 func TestEqualsSetting(t *testing.T) {
-	configs, err := New([]string{"--version=latest", "--buffer-size=100"})
+	configs, err := New([]string{"--version=latest", "--buffer-size=100", "--port=33060"})
 	if err != nil {
 		t.Error(err)
 	}
@@ -43,7 +43,11 @@ func check(configs *Configs, t *testing.T) {
 	}
 	size := configs.GetBufferSize()
 	if size != 100 {
-		errs = append(errs, fmt.Errorf("expected 'buffer-size' to be %d", 100))
+		errs = append(errs, fmt.Errorf("expected 'buffer-size' to be %d, got %d", 100, size))
+	}
+	port := configs.GetPort()
+	if port != 33060 {
+		errs = append(errs, fmt.Errorf("expected 'port' to be %d, got %d", 33060, port))
 	}
 	err := utils.GetErrors(errs)
 	if err != nil {

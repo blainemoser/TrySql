@@ -116,6 +116,10 @@ func (c *TrySqlShell) handleCommand(command string) bool {
 		c.query(commandSplit)
 		return false
 	}
+	if commandSplit, ok := c.checkDetails(command); ok {
+		c.details(commandSplit)
+		return false
+	}
 	switch command {
 	case "":
 		return false
@@ -123,8 +127,6 @@ func (c *TrySqlShell) handleCommand(command string) bool {
 		return c.quit()
 	case "container-details", "cd", "get-container-details":
 		return c.containerDetails(command)
-	case "temp-password", "tp", "get-temporary-password":
-		return c.tempPassword(command)
 	case "container-id", "cid", "get-container-id":
 		return c.containerID(command)
 	case "password", "p", "get-password":
@@ -133,6 +135,8 @@ func (c *TrySqlShell) handleCommand(command string) bool {
 		return c.getHistory()
 	case "docker-version", "version", "dv":
 		return c.getVersion(command)
+	case "mysql", "ms":
+		return c.mysql(command)
 	case "[error]":
 		return false
 	default:
@@ -165,7 +169,7 @@ func (c *TrySqlShell) query(command []string) {
 	if len(command) < 2 {
 		return
 	}
-	query := c.getQuery(command)
+	query := c.getMultiCommand(command)
 	result, err := c.TS.Query(query, true)
 	if err != nil {
 		result = err.Error()
@@ -173,7 +177,15 @@ func (c *TrySqlShell) query(command []string) {
 	c.waitForShellOutput(command[0]+" "+query, result, false)
 }
 
-func (c *TrySqlShell) getQuery(command []string) string {
+func (c *TrySqlShell) details(command []string) {
+	if len(command) < 1 {
+		return
+	}
+	result := c.TS.GetDetails(command[1:])
+	c.waitForShellOutput(strings.Join(command, " "), result, false)
+}
+
+func (c *TrySqlShell) getMultiCommand(command []string) string {
 	command = command[1:]
 	result := make([]string, len(command))
 	for i := 0; i < len(command); i++ {
@@ -188,6 +200,10 @@ func (c *TrySqlShell) checkHelp(command string) ([]string, bool) {
 
 func (c *TrySqlShell) checkQuery(command string) ([]string, bool) {
 	return c.checkFirst(command, []string{"query", "q"})
+}
+
+func (c *TrySqlShell) checkDetails(command string) ([]string, bool) {
+	return c.checkFirst(command, []string{"details", "d"})
 }
 
 func (c *TrySqlShell) checkFirst(command string, check []string) ([]string, bool) {
@@ -266,21 +282,14 @@ func (c *TrySqlShell) Push(input string) {
 
 func (c *TrySqlShell) getHistory() bool {
 	fmt.Println()
-	message := ""
+	var message string
 	for e := c.Buffer.Front(); e != nil; e = e.Next() {
 		if e.Value != nil {
 			if add, ok := e.Value.(*BufferObject); ok {
 				if add.hidden {
 					continue
 				}
-				if len(add.In) > 0 {
-					message += "\t" + add.In + "\n"
-				}
-				if len(add.Out) > 0 {
-					outMsg := strings.Replace(add.Out, "> ", "", 1)
-					utils.TruncString(&outMsg, 100)
-					message += "\t-> " + outMsg + "\n\t   at " + add.Time.Format(timeFormat) + "\n\n"
-				}
+				message += add.getMessage()
 			}
 		}
 	}
@@ -291,6 +300,21 @@ func (c *TrySqlShell) getHistory() bool {
 		TestHistoryOutput = message
 	}
 	return false
+}
+
+func (b *BufferObject) getMessage() string {
+	message := ""
+	if len(b.In) > 0 {
+		message += "\t" + b.In + "\n"
+	}
+	if len(b.Out) > 0 {
+		outMsg := strings.Replace(b.Out, "> ", "", 1)
+		utils.TruncString(&outMsg, 100)
+		message += "\t-> " + outMsg + "\n\t   at " + b.Time.Format(timeFormat) + "\n\n"
+	} else {
+		message += "\t->\n\t   at " + b.Time.Format(timeFormat) + "\n\n"
+	}
+	return message
 }
 
 func (c *TrySqlShell) containerDetails(command string) bool {
@@ -304,12 +328,7 @@ func (c *TrySqlShell) containerID(command string) bool {
 }
 
 func (c *TrySqlShell) password(command string) bool {
-	c.waitForShellOutput(command, "> "+c.TS.CurrentPassword(), false)
-	return false
-}
-
-func (c *TrySqlShell) tempPassword(command string) bool {
-	c.waitForShellOutput(command, "> "+c.TS.DockerTempPassword(), false)
+	c.waitForShellOutput(command, "> "+c.TS.Password(), false)
 	return false
 }
 
@@ -329,6 +348,11 @@ func (c *TrySqlShell) LastOutput() string {
 
 func (c *TrySqlShell) getVersion(command string) bool {
 	c.waitForShellOutput(command, "> "+c.TS.DockerVersion(), false)
+	return false
+}
+
+func (c *TrySqlShell) mysql(command string) bool {
+	c.waitForShellOutput(command, "> "+c.TS.MySQLCommand(), false)
 	return false
 }
 

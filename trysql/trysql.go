@@ -1,17 +1,19 @@
 package trysql
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	jsonextract "github.com/blainemoser/JsonExtract"
 	"github.com/blainemoser/TrySql/configs"
 	"github.com/blainemoser/TrySql/docker"
-	"github.com/blainemoser/TrySql/utils"
 	"github.com/gosuri/uilive"
 )
 
@@ -27,6 +29,7 @@ type TrySql struct {
 	hash       string
 	ReadyState int
 	Configs    *configs.Configs
+	Details    *jsonextract.JSONExtract
 }
 
 func Initialise() *TrySql {
@@ -36,7 +39,7 @@ func Initialise() *TrySql {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	ts, err := generate(utils.GetProcessOwner(), confs)
+	ts, err := generate(confs)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -53,22 +56,12 @@ func Initialise() *TrySql {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	err = ts.setNewPass()
-	if err != nil {
-		tdErr := ts.TearDown()
-		if tdErr != nil {
-			log.Fatal(tdErr)
-		}
-		log.Fatal(err.Error())
-	}
 	return ts
 }
 
-func generate(owner string, configs *configs.Configs) (*TrySql, error) {
+func generate(configs *configs.Configs) (*TrySql, error) {
 	ts := &TrySql{
-		docker: &docker.Docker{
-			RunAsSudo: owner != "root",
-		},
+		docker:  docker.New(configs),
 		image:   "mysql/mysql-server:" + configs.GetMysqlVersion(),
 		Configs: configs,
 	}
@@ -83,8 +76,12 @@ func (ts *TrySql) DockerVersion() string {
 	return ts.docker.Version
 }
 
-func (ts *TrySql) DockerTempPassword() string {
-	return ts.docker.GeneratedRootPassword
+func (ts *TrySql) MySQLCommand() string {
+	return fmt.Sprintf(
+		"mysql -uroot -p%s -h127.0.0.1 -P%s",
+		ts.Password(),
+		ts.HostPortStr(),
+	)
 }
 
 func (ts *TrySql) Query(query string, report bool) (string, error) {
@@ -103,6 +100,44 @@ func (ts *TrySql) Query(query string, report bool) (string, error) {
 		}
 	}
 	return result, nil
+}
+
+func (ts *TrySql) GetDetails(details []string) string {
+	var property string
+	var err error
+	err = ts.setInspectData()
+	if err != nil {
+		return err.Error()
+	}
+	if len(details) < 1 {
+		property, err = ts.getJSON("[0]")
+		if err != nil {
+			return err.Error()
+		}
+		return property
+	}
+	result := make([]string, len(details))
+	for i := 0; i < len(details); i++ {
+		property, err = ts.getJSON("[0]/" + details[i])
+		if err != nil {
+			result[i] = fmt.Sprintf("%s:\n%s", details[i], err.Error())
+			continue
+		}
+		result[i] = fmt.Sprintf("%s:\n%s", details[i], property)
+	}
+	return strings.Join(result, "\n")
+}
+
+func (ts *TrySql) getJSON(address string) (string, error) {
+	property, err := ts.Details.Extract(address)
+	if err != nil {
+		return "", err
+	}
+	js, err := json.MarshalIndent(property, "", "\t")
+	if err != nil {
+		return "", err
+	}
+	return string(js), nil
 }
 
 func (ts *TrySql) parseQueryResult(result string) string {
@@ -133,17 +168,14 @@ func (ts *TrySql) TearDown() error {
 	return ts.waitAndWrite(ts.removingContainer, "removing container")
 }
 
-func (ts *TrySql) CurrentPassword() string {
-	if ts.docker.CurrentPassword == "" {
-		return ts.DockerTempPassword()
-	}
-	return ts.docker.CurrentPassword
+func (ts *TrySql) Password() string {
+	return ts.docker.Password
 }
 
 func (ts *TrySql) mysqlArgs(query string) string {
 	return fmt.Sprintf(
 		"exec TrySql mysql --user=root --password=\"%s\" --execute=\"%s\" --connect-expired-password",
-		ts.CurrentPassword(),
+		ts.Password(),
 		query,
 	)
 }
@@ -186,6 +218,17 @@ func (ts *TrySql) setHealthyStatus() error {
 	}
 }
 
+func (ts *TrySql) setInspectData() error {
+	result, err := ts.outputCommand([]string{"inspect", "TrySql"})
+	if err != nil {
+		return err
+	}
+	ts.Details = &jsonextract.JSONExtract{
+		RawJSON: strings.Trim(strings.Trim(result, " "), "\n"),
+	}
+	return nil
+}
+
 func (ts *TrySql) getHealthStatus(status chan bool, errorChan chan error) {
 	details := ts.GetContainerDetails(false)
 	details = strings.ToLower(details)
@@ -197,49 +240,6 @@ func (ts *TrySql) getHealthStatus(status chan bool, errorChan chan error) {
 		return
 	}
 	errorChan <- errors.New("no startup activity on container")
-}
-
-func (ts *TrySql) setNewPass() error {
-	err := ts.getPassLog()
-	if err != nil {
-		return err
-	}
-	newPass, _ := utils.MakePass()
-	_, err = ts.Query("ALTER USER 'root'@'localhost' IDENTIFIED BY '"+newPass+"';", false)
-	if err != nil {
-		return err
-	}
-	ts.docker.CurrentPassword = newPass
-	return nil
-}
-
-func (ts *TrySql) getPassLog() error {
-	logs, err := ts.getLogs()
-	if err != nil {
-		return err
-	}
-	for _, log := range logs {
-		if strings.Contains(log, "GENERATED ROOT PASSWORD") {
-			ts.docker.GeneratedRootPassword = ts.extractPassword(log)
-			return nil
-		}
-	}
-	return errors.New("temp password not found")
-}
-
-func (ts *TrySql) extractPassword(log string) string {
-	log = strings.Replace(log, "[Entrypoint]", "", 1)
-	log = strings.Replace(log, "GENERATED ROOT PASSWORD:", "", 1)
-	log = strings.Trim(log, " ")
-	return log
-}
-
-func (ts *TrySql) getLogs() ([]string, error) {
-	result, err := ts.outputCommand([]string{"logs", "TrySql"})
-	if err != nil {
-		return nil, err
-	}
-	return strings.Split(result, "\n"), nil
 }
 
 func (ts *TrySql) listContainers(all bool) ([]string, error) {
@@ -428,10 +428,31 @@ func (ts *TrySql) settingUpContainer(wg *sync.WaitGroup, initChan chan error) {
 		initChan <- err
 		return
 	}
-	result, err := ts.outputCommand([]string{"run", "-d", "-e", "3306", "-p", "6603:3306", "--name=TrySql", ts.image})
+	result, err := ts.outputCommand(ts.getRunCommand())
 	ts.hash = result
 	ts.ReadyState = 1
 	initChan <- err
+}
+
+func (ts *TrySql) getRunCommand() []string {
+	return []string{
+		"run",
+		"-d",
+		"--expose",
+		"3306",
+		"-e",
+		"MYSQL_ROOT_HOST=%",
+		"-e",
+		"MYSQL_ROOT_PASSWORD=" + ts.Password(),
+		"-p",
+		ts.HostPortStr() + ":3306",
+		"--name=TrySql",
+		ts.image,
+	}
+}
+
+func (ts *TrySql) HostPortStr() string {
+	return strconv.Itoa(ts.docker.HostPort)
 }
 
 func (ts *TrySql) needsCleanup() error {

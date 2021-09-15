@@ -78,14 +78,14 @@ func TestSpecial(t *testing.T) {
 	}
 }
 
-func TestTempPass(t *testing.T) {
-	defer utils.HandelPanic(t)
-	<-suite.SendTempPassSignal()
-}
-
 func TestPass(t *testing.T) {
 	defer utils.HandelPanic(t)
 	<-suite.SendPassSignal()
+}
+
+func TestMySQLCommand(t *testing.T) {
+	defer utils.HandelPanic(t)
+	<-suite.SendMySQLCommandSignal()
 }
 
 func TestHelp(t *testing.T) {
@@ -101,6 +101,11 @@ func TestHistory(t *testing.T) {
 func TestQuery(t *testing.T) {
 	defer utils.HandelPanic(t)
 	<-suite.SendQuerySignal()
+}
+
+func TestDetails(t *testing.T) {
+	defer utils.HandelPanic(t)
+	<-suite.SendDetailsSignal()
 }
 
 func TestContainerDetails(t *testing.T) {

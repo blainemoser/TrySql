@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -55,6 +56,7 @@ func HandelPanic(t *testing.T) {
 
 // MakeBearer creates a bearer token
 func MakePass() (string, []byte) {
+	rand.Seed(time.Now().Unix())
 	bytes := randBytes(32)
 	return string(bytes), bytes
 }

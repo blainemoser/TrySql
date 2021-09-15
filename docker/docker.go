@@ -4,18 +4,31 @@ import (
 	"errors"
 	"os/exec"
 	"strings"
+
+	"github.com/blainemoser/TrySql/configs"
+	"github.com/blainemoser/TrySql/utils"
 )
 
 type Docker struct {
-	Version               string
-	GeneratedRootPassword string
-	CurrentPassword       string
-	RunAsSudo             bool
+	Version   string
+	Password  string
+	HostPort  int
+	RunAsSudo bool
 }
 
 type command struct {
 	inputs []string
 	d      *Docker
+}
+
+func New(configs *configs.Configs) *Docker {
+	owner := utils.GetProcessOwner()
+	password, _ := utils.MakePass()
+	return &Docker{
+		RunAsSudo: owner != "root",
+		Password:  password,
+		HostPort:  configs.GetPort(),
+	}
 }
 
 func (d *Docker) Com() *command {
