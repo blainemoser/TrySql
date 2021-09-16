@@ -164,8 +164,12 @@ func TestTearDown(t *testing.T) {
 }
 
 func tInit() {
+	var err error
 	if !initialised {
-		tsql = Initialise()
+		tsql, err = Initialise()
+		if err != nil {
+			panic(err)
+		}
 		initialised = true
 	}
 }

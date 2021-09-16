@@ -21,14 +21,17 @@ type command struct {
 	d      *Docker
 }
 
-func New(configs *configs.Configs) *Docker {
-	owner := utils.GetProcessOwner()
+func New(configs *configs.Configs) (*Docker, error) {
+	owner, err := utils.GetProcessOwner()
+	if err != nil {
+		return nil, err
+	}
 	password, _ := utils.MakePass()
 	return &Docker{
 		RunAsSudo: owner != "root",
 		Password:  password,
 		HostPort:  configs.GetPort(),
-	}
+	}, nil
 }
 
 func (d *Docker) Com() *command {

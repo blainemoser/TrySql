@@ -6,14 +6,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/blainemoser/TrySql/configs"
 	"github.com/blainemoser/TrySql/utils"
 )
 
 var docker *Docker
 
 func TestMain(m *testing.M) {
-	docker = &Docker{
-		RunAsSudo: utils.GetProcessOwner() != "root",
+	cnfs, err := configs.New([]string{})
+	if err != nil {
+		panic(err)
+	}
+	docker, err = New(cnfs)
+	if err != nil {
+		panic(err)
 	}
 	code := m.Run()
 	os.Exit(code)

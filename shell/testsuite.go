@@ -28,7 +28,10 @@ func (ts *TestSuiteTS) HandlePanic() {
 func InitialiseTestSuite() (*TestSuiteTS, error) {
 	trysql.Testing = true
 	Testing = true
-	trySql := trysql.Initialise()
+	trySql, err := trysql.Initialise()
+	if err != nil {
+		return nil, err
+	}
 	ts := &TestSuiteTS{
 		Shell: New(trySql),
 		TS:    trySql,

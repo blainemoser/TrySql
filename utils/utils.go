@@ -2,7 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -14,12 +13,12 @@ import (
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-func GetProcessOwner() string {
+func GetProcessOwner() (string, error) {
 	stdout, err := exec.Command("ps", "-o", "user=", "-p", strconv.Itoa(os.Getpid())).Output()
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
-	return string(stdout)
+	return string(stdout), nil
 }
 
 func GetErrors(errs []error) error {
@@ -54,7 +53,6 @@ func HandelPanic(t *testing.T) {
 	}
 }
 
-// MakeBearer creates a bearer token
 func MakePass() (string, []byte) {
 	rand.Seed(time.Now().Unix())
 	bytes := randBytes(32)

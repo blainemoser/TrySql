@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -32,40 +31,44 @@ type TrySql struct {
 	Details    *jsonextract.JSONExtract
 }
 
-func Initialise() *TrySql {
+func Initialise() (*TrySql, error) {
 	var err error
 	args := getArgs()
 	confs, err := configs.New(args)
 	if err != nil {
-		log.Fatal(err.Error())
+		return nil, err
 	}
 	ts, err := generate(confs)
 	if err != nil {
-		log.Fatal(err.Error())
+		return nil, err
 	}
 	fmt.Println("found " + string(ts.DockerVersion()))
 	err = ts.provision()
 	if err != nil {
-		log.Fatal("could not provision container - " + err.Error())
+		return nil, err
 	}
 	err = ts.run()
 	if err != nil {
-		log.Fatal("could not run container - " + err.Error())
+		return nil, err
 	}
 	err = ts.waitForHealthy()
 	if err != nil {
-		log.Fatal(err.Error())
+		return nil, err
 	}
-	return ts
+	return ts, nil
 }
 
 func generate(configs *configs.Configs) (*TrySql, error) {
+	d, err := docker.New(configs)
+	if err != nil {
+		return nil, err
+	}
 	ts := &TrySql{
-		docker:  docker.New(configs),
+		docker:  d,
 		image:   "mysql/mysql-server:" + configs.GetMysqlVersion(),
 		Configs: configs,
 	}
-	err := ts.initDocker()
+	err = ts.initDocker()
 	if err != nil {
 		return nil, err
 	}
