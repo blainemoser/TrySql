@@ -89,6 +89,7 @@ func (c *TrySqlShell) greeting() {
 
 func (c *TrySqlShell) running() {
 	c.greeting()
+	fmt.Println("shell ready")
 	go c.waitForInput()
 	for {
 		select {
