@@ -168,7 +168,9 @@ func (ts *TrySql) TearDown() error {
 	if err != nil {
 		return err
 	}
-	return ts.waitAndWrite(ts.removingContainer, "removing container")
+	err = ts.waitAndWrite(ts.removingContainer, "removing container")
+	fmt.Println("destroyed")
+	return err
 }
 
 func (ts *TrySql) Password() string {
