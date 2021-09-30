@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	ts, err := trysql.Initialise()
+	ts, err := trysql.Initialise([]string{})
 	if err != nil {
 		log.Fatal(err.Error())
 	}

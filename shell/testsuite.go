@@ -28,7 +28,7 @@ func (ts *TestSuiteTS) HandlePanic() {
 func InitialiseTestSuite() (*TestSuiteTS, error) {
 	trysql.Testing = true
 	Testing = true
-	trySql, err := trysql.Initialise()
+	trySql, err := trysql.Initialise([]string{})
 	if err != nil {
 		return nil, err
 	}

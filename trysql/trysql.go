@@ -31,9 +31,11 @@ type TrySql struct {
 	Details    *jsonextract.JSONExtract
 }
 
-func Initialise() (*TrySql, error) {
+func Initialise(args []string) (*TrySql, error) {
 	var err error
-	args := getArgs()
+	if len(args) < 1 {
+		args = getArgs()
+	}
 	confs, err := configs.New(args)
 	if err != nil {
 		return nil, err
